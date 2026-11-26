@@ -98,10 +98,11 @@ AI314/  (仓库根 = 插件根)
 | 能力 | CC | AGY |
 |------|----|-----|
 | 插件 manifest | `.claude-plugin/plugin.json` | `plugin.json` 或 `.antigravity-plugin/plugin.json` |
-| 插件 skills | `skills/<name>/SKILL.md`，命名空间 `ai314:<name>` | 插件内 `skills/` |
-| 常驻注入 | 插件 `hooks/hooks.json` 的 SessionStart，输出 `hookSpecificOutput.additionalContext` | 插件 `rules/*.md`，frontmatter `trigger: always_on`；always_on 与全局规则共享 20k token 预算 |
-| 安装 | `/plugin marketplace add lupguo/AI314` → `/plugin install ai314@ai314` | `agy plugin install https://github.com/lupguo/AI314` |
-| 更新 | 修改 `version` 后 `claude plugin update ai314` | 文档未说明 git 源的更新命令 → **实现时需实测**；兜底：`agy plugin uninstall ai314 && agy plugin install <url>` |
+| 插件 skills | `skills/<name>/SKILL.md`，命名空间 `ai314:<name>` | `skills/<name>/SKILL.md`，frontmatter `name` 必须与目录名一致；**无插件前缀**，以 `/<name>` 暴露 |
+| 常驻注入 | 插件 `hooks/hooks.json` 的 SessionStart，输出 `hookSpecificOutput.additionalContext` | 插件根 `rules/` 目录（官方 build-plugins 文档已确认）：`rules/<name>.md` 带 frontmatter `trigger: always_on`；always_on 与全局规则共享 20k token 预算。AGY 的插件 hooks 文件在插件根 `hooks.json`（与 CC 的 `hooks/hooks.json` 路径不同，互不干扰），一期 AGY 不使用 hook |
+| 安装 | `/plugin marketplace add lupguo/AI314` → `/plugin install ai314@ai314` | `agy plugin install https://github.com/lupguo/AI314`（本地开发：`agy plugin install ./`） |
+| 校验 | `claude plugin validate .` | `agy plugin validate --strict .` |
+| 更新 | 修改 `version` 后 `claude plugin update ai314` | 文档要求每次发布递增 `version` 供客户端检测更新；但 AGY CLI 1.5.16 **没有 `update` 子命令**（本机已确认），CLI 用户更新方式为 `agy plugin uninstall ai314 && agy plugin install https://github.com/lupguo/AI314` |
 | 项目规则文件 | 有 `CLAUDE.md` 时只读 `CLAUDE.md`；无则读 `AGENTS.md`；`@path` 可导入 | 读 `AGENTS.md`/`GEMINI.md`（工作目录到仓库根），不读子目录规则 |
 
 参考实现：本机已安装的 superpowers 7.0.0 同时提供 `.claude-plugin/` 与 `.antigravity-plugin/`，其 `hooks/session-start` 的 JSON 输出分支可作为参考。
@@ -148,9 +149,9 @@ L0 原文（`AGENTS.base.md` 第零条 + 1~15 条）全部要点按下表落位�
 
 | 路径范围 | 技能 |
 | :-- | :-- |
-| `services/**` | ai314:stack-go-microservice |
-| `web/**` | ai314:stack-web-admin |
-| `*` | ai314:mode-legacy-maintenance |
+| `services/**` | stack-go-microservice |
+| `web/**` | stack-web-admin |
+| `*` | mode-legacy-maintenance |
 <!-- AI314:END -->
 ```
 
@@ -178,7 +179,7 @@ Skill 文件名约束：目录名即 skill 名（去掉 `stack-`/`mode-` 以外�
 **升级（AI314 → 各项目）**
 
 1. AI314 改动合入 main 后，执行 `scripts/bump-version.sh <x.y.z>`（同步三处 version）并更新 `CHANGELOG.md`，打 tag `vX.Y.Z`。
-2. 各机器：CC `claude plugin update ai314`；AGY 按 §4.1 实测结果执行。
+2. 各机器：CC `claude plugin update ai314`；AGY 卸载后重装（见 §4.1），或运行 `scripts/update.sh`。
 3. 由于正文全部在插件内，业务项目**无需任何改动**即获得新 L0/L1。仅当声明块格式变化时，在项目内运行 onboard 刷新。
 
 版本语义：规则收紧/新增红线 → minor；措辞/修正 → patch；声明块格式不兼容 → major。
@@ -192,7 +193,7 @@ Skill 文件名约束：目录名即 skill 名（去掉 `stack-`/`mode-` 以外�
 ## 9. 质量门禁
 
 - `scripts/validate.sh`：所有 `skills/*/SKILL.md` frontmatter 含 `name`（与目录一致）与 `description`（≥ 10 字）；`stack-*` 含 `## 1.`~`## 4.` 章节；行数警告阈值 220；敏感信息正则扫描；三处 version 一致；`rules/ai314-core.md` ≤ 40 行且含 `trigger: always_on`。
-- `claude plugin validate .` 通过（若本机 CC 支持该命令）。
+- `claude plugin validate .` 与 `agy plugin validate --strict .` 均通过。
 - `tests/`：bash 测试脚本，至少覆盖：hook 输出为合法 JSON 且含 core 内容；validate.sh 对故意构造的坏样例报错；sync-back.sh 在临时目录中的回流行为；onboard 的声明块幂等替换逻辑如果落为脚本则同样测试。
 - `make check`（新增 Makefile）一条命令跑完以上全部。
 - **端到端冒烟（手动，需记录结果）**：在一个临时 git 仓库中分别用 CC 与 AGY 本地安装插件，确认 ① 会话开始可见常驻核心；② 询问"帮我规划一个功能"会加载 `planning`；③ onboard 能写入声明块。
@@ -206,9 +207,9 @@ Skill 文件名约束：目录名即 skill 名（去掉 `stack-`/`mode-` 以外�
 
 ## 11. 风险与待实测项
 
-0. 本机已安装 AGY CLI（`agy`），AGY 端冒烟可在本机执行。
-1. **AGY 插件更新命令**未文档化 → 实测；不可用则在 README 写明重装方式。
-2. **AGY 插件 rules 是否从插件根 `rules/` 加载**：文档写的是安装后位于 `~/.gemini/config/plugins/<plugin>/rules/`，即插件根 `rules/`；需冒烟确认。兜底：提供 `scripts/agy-link-core.sh`，把 `~/.gemini/config/rules/ai314-core.md` 软链到已安装插件内的 `rules/ai314-core.md`（全局规则，仍是单一正文、无副本），README 标注为 AGY 安装的第二步。〔实现者决定〕
-3. **AGY skill 命名空间**：不确定是否带 `ai314:` 前缀。声明块与常驻核心中的技能引用需对两者都可理解（例如写 `stack-go-microservice（ai314 插件）`），实测后定稿。
+0. 本机已安装 AGY CLI 1.5.16（`agy`），AGY 端冒烟可在本机执行。
+1. **AGY 无 update 命令**（已确认）→ README 写明卸载重装方式；可提供 `scripts/update.sh` 一键完成 CC update + AGY 重装。〔实现者决定〕
+2. AGY 插件 `rules/` 加载已由官方文档确认；冒烟仍需验证 `trigger: always_on` 生效。
+3. **Skill 命名差异**（已确认）：CC 为 `ai314:<name>`，AGY 为 `/<name>`。声明块、常驻核心与各 skill 中引用技能时一律写**裸名**（如 `stack-go-microservice`），并在常驻核心说明"CC 下带 `ai314:` 前缀"。
 4. **Skill 触发不保证**：靠常驻核心中的路由表 + 声明块兜底；冒烟测试覆盖主要场景。
 5. CC 在同时存在 CLAUDE.md 与 AGENTS.md 时只读 CLAUDE.md，onboard 必须处理 `@AGENTS.md` 导入，否则声明块对 CC 不可见。
