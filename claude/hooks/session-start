@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# AI314 SessionStart：把插件内宪法注入会话上下文；并在后台触发远程自动更新（仅 ~/.ai314 存在时）。
+set -u
+ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+if [ -x "$ROOT/hooks/auto-update" ]; then
+  "$ROOT/hooks/auto-update" claude >/dev/null 2>&1 </dev/null &
+fi
+# 用 python3 序列化 JSON，保证中文、引号、反斜杠等转义正确
+exec python3 - "$ROOT/rules/AGENTS.md" <<'PY'
+import json, sys, pathlib
+p = pathlib.Path(sys.argv[1])
+ctx = ""
+if p.is_file():
+    ctx = "<AI314_CONSTITUTION>\n以下是 AI314 插件提供的工程宪法，在本会话中全程生效：\n\n" + p.read_text(encoding="utf-8") + "\n</AI314_CONSTITUTION>"
+print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": ctx}}, ensure_ascii=False))
+PY

@@ -1,0 +1,16 @@
+{
+  "name": "ai314",
+  "owner": {
+    "name": "lupguo"
+  },
+  "metadata": {
+    "description": "AI314 VibeCoding 工程规范：L0 宪法 + L1 技术栈 + L2 研发模式"
+  },
+  "plugins": [
+    {
+      "name": "ai314",
+      "source": "./claude",
+      "description": "AI314 VibeCoding 工程规范：L0 宪法 + L1 技术栈 + L2 研发模式"
+    }
+  ]
+}

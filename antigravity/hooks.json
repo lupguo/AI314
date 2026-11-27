@@ -1,0 +1,11 @@
+{
+  "ai314": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "f=\"$HOME/.gemini/config/plugins/ai314/hooks/auto-update\"; [ -x \"$f\" ] && (\"$f\" antigravity >/dev/null 2>&1 </dev/null &); echo '{}'",
+        "timeout": 5
+      }
+    ]
+  }
+}

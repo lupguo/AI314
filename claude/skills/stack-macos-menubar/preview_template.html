@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VibeCoding 架构与交互决策确认台</title>
+  <!-- 引入 Mermaid 用于渲染系统架构与流程图（离线自动降级显示源码） -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg-app: #0f1117;
+      --bg-panel: #161b26;
+      --bg-card: #1e2534;
+      --bg-hover: #262f42;
+      --border: #2e384d;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --radius: 10px;
+      --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+      --font-mono: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-app);
+      color: var(--text-main);
+      line-height: 1.5;
+      padding-bottom: 96px;
+    }
+
+    /* 顶部导航栏 */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(15, 17, 23, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+    .header-title h1 { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 99px;
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      font-family: var(--font-mono);
+    }
+    .header-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    /* Tab 切换 */
+    .tabs {
+      display: flex;
+      background: var(--bg-panel);
+      padding: 4px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    /* 主容器 */
+    main { max-width: 1200px; margin: 24px auto; padding: 0 24px; }
+    .tab-section { display: none; }
+    .tab-section.active { display: block; animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* 卡片与网格 */
+    .grid-2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 20px; }
+    @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-title { font-size: 14px; font-weight: 600; color: #e2e8f0; }
+
+    /* 决策选项区 */
+    .decision-group { margin-bottom: 18px; }
+    .decision-label { font-size: 13px; font-weight: 600; margin-bottom: 8px; display: block; }
+    .decision-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+    .options-list { display: flex; flex-direction: column; gap: 8px; }
+    .option-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .option-item:hover { border-color: var(--accent); background: var(--bg-hover); }
+    .option-item.selected {
+      border-color: var(--accent);
+      background: rgba(59, 130, 246, 0.1);
+    }
+    .option-item input { margin-top: 3px; accent-color: var(--accent); }
+    .option-content { flex: 1; }
+    .option-title { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+    .rec-tag {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .option-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    /* Mermaid 容器 */
+    .mermaid-box {
+      background: #0b0e14;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      display: flex;
+      justify-content: center;
+      min-height: 260px;
+    }
+
+    /* 目录树与 Non-Goals */
+    pre.tree-box {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      background: #0b0e14;
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      color: #cbd5e1;
+      overflow-x: auto;
+    }
+    .non-goal-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #fca5a5;
+      padding: 6px 0;
+      border-bottom: 1px dashed var(--border);
+    }
+    .non-goal-item:last-child { border-bottom: none; }
+
+    /* macOS Menu Bar 原型舞台 */
+    .mac-stage {
+      background: radial-gradient(circle at top right, #1e293b, #090d16);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      min-height: 460px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+    .mac-menubar {
+      width: 100%;
+      height: 28px;
+      background: rgba(30, 41, 59, 0.85);
+      backdrop-filter: blur(8px);
+      border-radius: 6px;
+      padding: 0 12px;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 14px;
+      font-size: 12px;
+      color: #e2e8f0;
+      border: 1px solid rgba(255,255,255,0.08);
+      margin-bottom: 10px;
+    }
+    .mac-tray-icon {
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(59, 130, 246, 0.3);
+      border: 1px solid var(--accent);
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .mac-popover {
+      width: 340px;
+      background: rgba(28, 33, 46, 0.96);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 12px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+      padding: 14px;
+      transition: width 0.2s ease;
+    }
+    .proto-controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .pill-btn {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      cursor: pointer;
+    }
+    .pill-btn.active { background: var(--accent); border-color: var(--accent); }
+
+    /* 补充输入框 */
+    textarea {
+      width: 100%;
+      background: #0b0e14;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      padding: 12px;
+      resize: vertical;
+      min-height: 84px;
+    }
+    textarea:focus { outline: none; border-color: var(--accent); }
+
+    /* 底部悬浮操作栏 */
+    footer.action-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(22, 27, 38, 0.95);
+      backdrop-filter: blur(12px);
+      border-top: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 60;
+    }
+    .summary-status { font-size: 13px; color: var(--text-muted); }
+    .summary-status strong { color: var(--text-main); }
+    .btn-group { display: flex; gap: 10px; }
+    .btn {
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s;
+    }
+    .btn-secondary {
+      background: var(--bg-card);
+      border-color: var(--border);
+      color: var(--text-main);
+    }
+    .btn-secondary:hover { background: var(--bg-hover); }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-success {
+      background: var(--success);
+      color: #064e3b;
+    }
+
+    /* 预览弹窗 */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 100%;
+      max-width: 680px;
+      padding: 20px;
+    }
+    .modal pre {
+      background: #0b0e14;
+      border: 1px solid var(--border);
+      padding: 14px;
+      border-radius: 8px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      max-height: 360px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      margin: 14px 0;
+      color: #e2e8f0;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-title">
+    <h1><span id="project-name">Project Spec Review</span> <span class="badge" id="stage-badge">STAGE 1: SPEC & UI LOCK</span></h1>
+    <div class="header-meta" id="project-desc">请审阅以下架构设计与交互原型，勾选决策项后点击底部按钮复制指令发回给 Agent。</div>
+  </div>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="tab-decisions">1. 核心决策与边界</button>
+    <button class="tab-btn" data-tab="tab-arch">2. 架构与目录拓扑</button>
+    <button class="tab-btn" data-tab="tab-ui">3. UI 交互原型预览</button>
+  </div>
+</header>
+
+<main>
+  <!-- TAB 1: 核心决策点（由 Agent 动态填充） -->
+  <section id="tab-decisions" class="tab-section active">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">待拍板关键技术与产品决策</span>
+          <span style="font-size: 12px; color: var(--text-muted);">已默认选中推荐项</sp
+        </div>
+        <div id="decisions-container"></div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">明确不做清单 (Non-Goals 红线)</span>
+            <span style="font-size: 11px; color: var(--danger);">防止过度设计</span>
+          </div>
+          <div id="nongoals-container"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">全局修订意见 / 补充约束</span>
+          </div>
+          <textarea id="custom-notes" placeholder="在此输入额外修改意见（例如：Popover 宽度调整为 360px、增加 Cmd+Shift+K 快捷键、取消云同步功能等）..."></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 2: 系统架构与目录 -->
+  <section id="tab-arch" class="tab-section">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">系统数据流与状态机架构图</span>
+        <span style="font-size: 12px; color: var(--text-muted);">Mermaid 实时渲染</span>
+      </div>
+      <div class="mermaid-box">
+        <div class="mermaid" id="mermaid-diagram"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">分层模块目录契约</span>
+      </div>
+      <pre class="tree-box" id="dir-tree"></pre>
+    </div>
+  </section>
+
+  <!-- TAB 3: UI 原型预览舞台 -->
+  <section id="tab-ui" class="tab-section">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">交互原型沙盒（支持测试窗口尺寸与状态切换）</span>
+        <div class="proto-controls" style="margin:0;">
+          <button class="pill-btn active" onclick="setPopoverWidth(320, this)">窄版 320px</button>
+          <button class="pill-btn" onclick="setPopoverWidth(380, this)">标准 380px</button>
+          <button class="pill-btn" onclick="setPopoverWidth(440, this)">宽版 440px</button>
+        </div>
+      </div>
+
+      <div class="mac-stage">
+        <div class="mac-menubar">
+          <span>Wi-Fi</span>
+          <span>100%</span>
+          <span class="mac-tray-icon" id="tray-label">⌘ AppIcon</span>
+          <span>周四 00:10</span>
+        </div>
+
+        <!-- Agent 可在此容器内注入具体应用的纯 HTML/CSS UI 原型 -->
+        <div class="mac-popover" id="popover-frame">
+          <div id="ui-prototype-slot">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <strong style="font-size:13px;">快捷任务面板 (Mock 原型)</strong>
+              <span style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono);">⌘⇧Space</span>
+            </div>
+            <input type="text" placeholder="输入指令或过滤内容..." style="width:100%; padding:8px 10px; border-radius:6px; border:1px solid var(--border); background:#0f1117; color:#fff; font-size:12px; margin-bottom:10px;" />
+            <div style="display:flex; flex-direction:column; gap:6px; font-size:12px;">
+              <div style="padding:8px; background:rgba(255,255,255,0.05); border-radius:6px; display:flex; justify-content:space-between;">
+                <span>示例条目 A（正常状态）</span>
+                <span style="color:var(--success);">● Ready</span>
+              </div>
+              <div style="padding:8px; background:rgba(255,255,255,0.03); border-radius:6px; display:flex; justify-content:space-between;">
+                <span>示例条目 B（次要状态）</span>
+                <span style="color:var(--text-muted);">⌘2</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="action-bar">
+  <div class="summary-status">
+    已确认 <strong id="selected-count">0</strong> 项决策 · 生成标准 Markdown 契约指令
+  </div>
+  <div class="btn-group">
+    <button class="btn btn-secondary" onclick="openPreviewModal()">预览生成的 Prompt</button>
+    <button class="btn btn-primary" id="copy-btn" onclick="copyFeedback()">一键复制决策结果发回给 Agent</button>
+  </div>
+</footer>
+
+<!-- 预览模态框 -->
+<div class="modal-backdrop" id="preview-modal" onclick="if(event.target===this) closePreviewModal()">
+  <div class="modal">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <strong style="font-size:15px;">生成的 Agent 执行指令预览</strong>
+      <button class="pill-btn" onclick="closePreviewModal()">关闭</button>
+    </div>
+    <pre id="generated-output"></pre>
+    <div style="display:flex; justify-content:flex-end; gap:10px;">
+      <button class="btn btn-primary" onclick="copyFeedback(); closePreviewModal();">复制并关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  /**
+   * ============================================================================
+   * AGENT 数据注入区（Agent 每次生成决策页时，只需替换此 SPEC_DATA 对象即可）
+   * ============================================================================
+   */
+  const SPEC_DATA = {
+    projectName: "QuickClip MenuBar",
+    stage: "SPEC & ARCHITECTURE REVIEW",
+    description: "基于 SwiftUI + SwiftData 的轻量级 macOS 菜单栏工具，请核对以下核心架构与交互边界。",
+    decisions: [
+      {
+        id: "storage",
+        title: "1. 本地数据持久化方案",
+        desc: "决定历史记录的检索速度与系统兼容性",
+        type: "radio", // radio 单选 | checkbox 多选
+        options: [
+          { value: "SwiftData (macOS 14+ 原生)", desc: "零第三方依赖，支持结构化查询与自动迁移", recommended: true },
+          { value: "SQLite / GRDB", desc: "适合十万级以上高频全文检索，需引入外部依赖", recommended: false },
+          { value: "纯内存 + JSON 快照", desc: "重启后仅保留最近 50 条，极致轻量", recommended: false }
+        ]
+      },
+      {
+        id: "window_mode",
+        title: "2. 菜单栏交互与窗口行为",
+        desc: "控制点击图标及全局快捷键触发时的表现",
+        type: "radio",
+        options: [
+          { value: "标准 NSPopover 浮动面板 (失焦自动收起)", desc: "符合 macOS 原生菜单栏工具直觉，支持钉住置顶", recommended: true },
+          { value: "独立无边框浮动窗口 (屏幕居中唤起)", desc: "类似 Raycast / Spotlight 体验", recommended: false }
+        ]
+      },
+      {
+        id: "features_p0",
+        title: "3. P0 首版纳入的核心能力（可多选）",
+        desc: "未勾选项将自动移入 Non-Goals 或 P1 迭代",
+        type: "checkbox",
+        options: [
+          { value: "全局快捷键唤起与键盘上下键导航", desc: "支持纯键盘操作闭环", recommended: true },
+          { value: "开机自启动 (SMAppService)", desc: "使用 Apple 原生现代 API", recommended: true },
+          { value: "iCloud 多端同步", desc: "复杂度高，建议延后至 v1.1", recommended: false }
+        ]
+      }
+    ],
+    nonGoals: [
+      "不做复杂富文本编辑器，仅专注纯文本与链接快速处理",
+      "不引入 Electron / WebView，保持内存占用低于 40MB",
+      "首版不开发自定义插件市场与脚本引擎"
+    ],
+    mermaidGraph: `flowchart LR
+      User((用户操作/快捷键)) --> UI[Sources/UI<br/>SwiftUI Popover]
+      UI -->|Intent| VM[Sources/Core<br/>AppState 状态机]
+      VM --> Service[Sources/Services<br/>系统权限/剪贴板/热键]
+      VM --> Store[(SwiftData 本地存储)]
+      VM -.->|结构化日志| Log[/tmp/app_debug.log]`,
+    directoryTree: `ProjectRoot/
+├── AGENTS.md              # 全局工程与自测门禁契约
+├── Makefile               # build / test / dmg 一键脚本
+├── docs/                  # 锁定后的唯一事实来源 (SSOT)
+│   ├── PRD.md
+│   ├── UI_SPEC.md
+│   └── ARCHITECTURE.md
+├── Sources/
+│   ├── App/               # MenuBarExtra 入口与生命周期
+│   ├── UI/                # 纯视图层 (支持 Mock 数据预览)
+│   ├── Core/              # 纯业务逻辑与状态机 (无 UI 依赖)
+│   └── Services/          # 快捷键、存储、日志等系统服务
+└── Tests/
+    └── CoreTests/         # 2/8 原则核心主链路单元测试`
+  };
+
+  /**
+   * ============================================================================
+   * 交互渲染逻辑（无需修改）
+   * ============================================================================
+   */
+  function initPage() {
+    document.getElementById("project-name").textContent = SPEC_DATA.projectName;
+    document.getElementById("stage-badge").textContent = SPEC_DATA.stage;
+    document.getElementById("project-desc").textContent = SPEC_DATA.description;
+    document.getElementById("dir-tree").textContent = SPEC_DATA.directoryTree;
+
+    // 渲染决策项
+    const dContainer = document.getElementById("decisions-container");
+    SPEC_DATA.decisions.forEach((group, gIdx) => {
+      const div = document.createElement("div");
+      div.className = "decision-group";
+      div.innerHTML = `
+        <span class="decision-label">${group.title}</span>
+        ${group.desc ? `<div class="decision-desc">${group.desc}</div>` : ""}
+        <div class="options-list">
+          ${group.options.map((opt, oIdx) => `
+            <label class="option-item ${opt.recommended ? 'selected' : ''}">
+              <input type="${group.type}" name="${group.id}" value="${opt.value}" ${opt.recommended ? 'checked' : ''} onchange="handleSelectionChange(this)" />
+              <div class="option-content">
+                <div class="option-title">
+                  ${opt.value}
+                  ${opt.recommended ? '<span class="rec-tag">推荐</span>' : ''}
+                </div>
+                ${opt.desc ? `<div class="option-sub">${opt.desc}</div>` : ''}
+              </div>
+            </label>
+          `).join("")}
+        </div>
+      `;
+      dContainer.appendChild(div);
+    });
+
+    // 渲染 Non-Goals
+    const ngContainer = document.getElementById("nongoals-container");
+    SPEC_DATA.nonGoals.forEach(item => {
+      const row = document.createElement("div");
+      row.className = "non-goal-item";
+      row.innerHTML = `<span>✕</span><span>${item}</span>`;
+      ngContainer.appendChild(row);
+    });
+
+    // 渲染 Mermaid
+    const mermaidEl = document.getElementById("mermaid-diagram");
+    mermaidEl.textContent = SPEC_DATA.mermaidGraph;
+    if (window.mermaid) {
+      mermaid.initialize({ startOnLoad: false, theme: "dark" });
+      mermaid.run({ nodes: [mermaidEl] }).catch(() => {
+        mermaidEl.style.whiteSpace = "pre";
+        mermaidEl.style.fontFamily = "var(--font-mono)";
+      });
+    }
+
+    updateCounter();
+  }
+
+  function handleSelectionChange(input) {
+    if (input.type === "radio") {
+      document.querySelectorAll(`input[name="${input.name}"]`).forEach(el => {
+        el.closest(".option-item").classList.toggle("selected", el.checked);
+      });
+    } else {
+      input.closest(".option-item").classList.toggle("selected", input.checked);
+    }
+    updateCounter();
+  }
+
+  function updateCounter() {
+    const checked = document.querySelectorAll("#decisions-container input:checked").length;
+    document.getElementById("selected-count").textContent = checked;
+  }
+
+  function setPopoverWidth(width, btn) {
+    document.getElementById("popover-frame").style.width = width + "px";
+    document.querySelectorAll(".proto-controls .pill-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+  }
+
+  // Tab 切换
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".tab-section").forEach(s => s.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById(btn.dataset.tab).classList.add("active");
+    });
+  });
+
+  // 生成结构化 Markdown 反馈指令
+  function buildMarkdownFeedback() {
+    const lines = [
+      `## ✅ 决策确认反馈：${SPEC_DATA.projectName}`,
+      ``,
+      `我已审阅可视化方案，请按以下锁定决策生成/更新 \`docs/\` 下的正式契约文档并进入下一阶段：`,
+      ``
+    ];
+
+    SPEC_DATA.decisions.forEach(group => {
+      const selected = Array.from(document.querySelectorAll(`input[name="${group.id}"]:checked`))
+        .map(el => el.value);
+      lines.push(`- **${group.title}**：${selected.length ? selected.join("；") : "（未选择）"}`);
+    });
+
+    const width = document.getElementById("popover-frame").style.width || "340px";
+    lines.push(`- **UI 窗口尺寸确认**：Popover 宽度锁定为 \`${width}\``);
+
+    const notes = document.getElementById("custom-notes").value.trim();
+    if (notes) {
+      lines.push(``, `### 📝 补充修订要求`, notes);
+    }
+
+    lines.push(
+      ``,
+      `### 🚀 下一步执行指令`,
+      `1. 将以上决策与 Non-Goals 固化写入 \`docs/PRD.md\`、\`docs/UI_SPEC.md\` 和 \`docs/ARCHITECTURE.md\`。`,
+      `2. 严格遵循 \`AGENTS.md\`，开始搭建第一阶段带 Mock 数据的纯 UI 视图层（\`Sources/UI/\`），编译通过后再通知我。`
+    );
+
+    return lines.join("\n");
+  }
+
+  function openPreviewModal() {
+    document.getElementById("generated-output").textContent = buildMarkdownFeedback();
+    document.getElementById("preview-modal").classList.add("open");
+  }
+
+  function closePreviewModal() {
+    document.getElementById("preview-modal").classList.remove("open");
+  }
+
+  async function copyFeedback() {
+    const text = buildMarkdownFeedback();
+    try {
+      await navigator.clipboard.writeText(text);
+      const btn = document.getElementById("copy-btn");
+      const orig = btn.textContent;
+      btn.textContent = "✓ 已复制指令！直接粘贴发送给 Agent";
+      btn.classList.replace("btn-primary", "btn-success");
+      setTimeout(() => {
+        btn.textContent = orig;
+        btn.classList.replace("btn-success", "btn-primary");
+      }, 2500);
+    } catch (e) {
+      openPreviewModal();
+    }
+  }
+
+  initPage();
+</script>
+</body>
+</html>

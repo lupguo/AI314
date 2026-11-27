@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# AI314 远程自动更新器（两端共用）。用法：auto-update <claude|antigravity>
+# 仅当 ~/.ai314（AI314_HOME）是 dist 分支的 git clone 时工作；本地开发安装直接退出。
+# AGY 安装状态以 .installed-rev 记录（状态驱动而非事件驱动）：上次重装失败会在下次会话重试。
+set -u
+PLATFORM="${1:-claude}"
+HOME_DIR="${AI314_HOME:-$HOME/.ai314}"
+INTERVAL="${AI314_UPDATE_INTERVAL:-21600}"   # 6 小时
+STAMP="$HOME_DIR/.last-check"
+REV_FILE="$HOME_DIR/.installed-rev"
+LOG="$HOME_DIR/.update.log"
+AGY="${AI314_AGY_BIN:-agy}"
+
+[ -d "$HOME_DIR/.git" ] || exit 0
+log() { echo "$(date '+%F %T') [$PLATFORM] $*" >> "$LOG"; }
+
+ensure_agy_installed() {
+  [ "$PLATFORM" = "antigravity" ] || return 0
+  local head; head=$(git -C "$HOME_DIR" rev-parse HEAD 2>/dev/null) || return 0
+  [ "$(cat "$REV_FILE" 2>/dev/null)" = "$head" ] && return 0
+  # 先安装新版本再记录；agy install 对已安装插件会失败，所以先卸载。失败时不写 REV，下次重试
+  "$AGY" plugin uninstall ai314 >>"$LOG" 2>&1
+  if "$AGY" plugin install "$HOME_DIR/antigravity" >>"$LOG" 2>&1; then
+    echo "$head" > "$REV_FILE"; log "agy installed ${head:0:7}"
+  else
+    log "agy install failed ${head:0:7}, will retry next session"
+  fi
+}
+
+now=$(date +%s)
+last=$(cat "$STAMP" 2>/dev/null || echo 0)
+if [ $((now - last)) -lt "$INTERVAL" ]; then
+  ensure_agy_installed; exit 0
+fi
+echo "$now" > "$STAMP"
+
+branch=$(git -C "$HOME_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null)
+[ "$branch" = "dist" ] || { log "skip: branch=$branch"; exit 0; }
+[ -z "$(git -C "$HOME_DIR" status --porcelain --untracked-files=no)" ] || { log "skip: dirty"; exit 0; }
+if git -C "$HOME_DIR" fetch -q origin dist 2>>"$LOG"; then
+  if [ "$(git -C "$HOME_DIR" rev-parse HEAD)" != "$(git -C "$HOME_DIR" rev-parse origin/dist)" ]; then
+    git -C "$HOME_DIR" merge -q --ff-only origin/dist 2>>"$LOG" && log "pulled $(git -C "$HOME_DIR" rev-parse --short HEAD)" || log "ff-only failed"
+  fi
+else
+  log "fetch failed"
+fi
+ensure_agy_installed
+exit 0
