@@ -8,10 +8,10 @@ AI314 = AI31415926…：一套沉淀 AI VibeCoding 工程实践的方法论与�
 
 | 层 | 目录 | 加载方式 | 内容 |
 | :-- | :-- | :-- | :-- |
-| L0 宪法 | `content/L0-constitution/` | `AGENTS.base.md` 每次会话常驻；`planning`、`code-review` 按场景加载 | 阶段门禁、最小变更、TDD 纠偏、安全红线等 15 条 |
+| L0 宪法 | `content/L0-constitution/` | `AGENTS.base.md` 每次会话常驻；`planning`、`code-review` 按场景加载 | 产品交互、架构红线、最小变更、文档即契约、TDD、安全底线等 14 条 |
 | L1 技术栈 | `content/L1-stacks/stack-*` | 按场景或项目声明块加载 | go-microservice、web-admin、ios-app、macos-menubar、crawler-script（均为草案） |
 | L2 研发模式 | `content/L2-modes/mode-*` | 项目声明块启用 | exploration-mvp、legacy-maintenance |
-| 工具 | `content/tools/` | 按需调用 | onboard（项目接入）、contribute（回流）、extract-stack（逆向提炼） |
+| 工具 | `content/tools/` | 按需调用 | onboard（项目接入）、docs-base-sync（活文档盘点与回写）、contribute（回流）、extract-stack（逆向提炼） |
 
 技能统一命名为 `ai314:<技能名>`，两端写法相同，如 `/ai314:stack-go-microservice`。
 

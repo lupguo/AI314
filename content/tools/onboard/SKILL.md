@@ -22,7 +22,7 @@ description: 当需要把一个项目接入 AI314 规范、为项目选择或调
 
 ## 2. 选择技能
 
-按项目目录结构推荐"路径范围 → 技能"映射（大仓按子目录，单栈项目用 `*`），可用技能见宪法第四节索引表，经用户确认。
+按项目目录结构推荐"路径范围 → 技能"映射（大仓按子目录，单栈项目用 `*`），可用技能见宪法第五节索引表，经用户确认。
 
 ## 3. 写入声明块
 
@@ -34,7 +34,8 @@ printf '%s\n' '| `services/**` | ai314:stack-go-microservice |' | bash "<本技�
 
 `<本技能目录>` 即本 SKILL.md 所在目录。
 
-## 4. 项目骨架（仅缺失时创建）
+## 4. 项目骨架与活文档
 
-- `docs/{00-plans,01-biz,02-prod,03-ui-design,04-arch,05-deploy,_drafts}`
-- `.gitignore` 追加 `.env`、`.env.*`
+- 不预建空文档目录；`.gitignore` 中逐项检查 `.env`、`.env.*`、`docs/_drafts/`、`.superpowers/`，只追加缺失项。
+- 发现旧版 `docs/00-plans/`、`docs/0x-*/` 目录时列出，建议迁移到 `docs/base/`（宪法第 8 条），经用户确认后再移动。
+- 项目已有一定代码量且无 `docs/base/` 时，建议执行 `ai314:docs-base-sync` 存量盘点。
