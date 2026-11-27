@@ -1,0 +1,19 @@
+{"source": "USER_EXPLICIT", "type": "USER_INPUT", "status": "DONE", "content": "<USER_REQUEST>\n帮我在 app.py 加一个 add 函数\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nlocal time\n</ADDITIONAL_METADATA>"}
+{"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "content": "好的。", "tool_calls": [{"name": "edit_file", "args": {"Path": "/p/app.py", "Target": "a", "Replacement": "b"}}]}
+{"source": "MODEL", "type": "GENERIC", "status": "DONE", "content": "Edited"}
+{"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "tool_calls": "[{'name': 'run_command', 'args': {'CommandLine': 'go test ./...', 'WaitMsBeforeAsync': 5000}}]"}
+{"source": "MODEL", "type": "GENERIC", "status": "DONE", "content": "Created At: x\nCommand exited with code 1.\n\nCommand output:\n--- FAIL: TestAdd"}
+{"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "tool_calls": [{"name": "run_command", "args": {"CommandLine": "make lint"}}, {"name": "run_command", "args": {"CommandLine": "make lint"}}]}
+{"source": "MODEL", "type": "GENERIC", "status": "DONE", "content": "Command exited with code 2.\nlint error"}
+{"source": "MODEL", "type": "GENERIC", "status": "ERROR", "content": "Encountered error in step execution: lint error"}
+{"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "content": "测试失败了。要不要我把 lint 规则放宽?"}
+{"source": "USER_EXPLICIT", "type": "USER_INPUT", "status": "DONE", "content": "<USER_REQUEST>\n错了，应该修代码而不是放宽规则\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nlocal time\n</ADDITIONAL_METADATA>"}
+{"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "tool_calls": [{"name": "write_file", "args": {"Path": "/p/app.py", "Content": "x"}}]}
+{"source": "MODEL", "type": "GENERIC", "status": "DONE", "content": "Wrote"}
+{"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "tool_calls": [{"name": "run_command", "args": {"CommandLine": "go test ./..."}}]}
+{"source": "MODEL", "type": "GENERIC", "status": "DONE", "content": "Command exited with code 0.\nok"}
+{"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "content": "已修复。是否同时更新 README？"}
+{"source": "USER_EXPLICIT", "type": "USER_INPUT", "status": "DONE", "content": "<USER_REQUEST>\n好的\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nlocal time\n</ADDITIONAL_METADATA>"}
+{"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "tool_calls": [{"name": "edit_file", "args": {"Path": "/p/app.py"}}]}
+{"source": "MODEL", "type": "GENERIC", "status": "DONE", "content": "Edited"}
+{"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "content": "完成。"}

@@ -1,0 +1,10 @@
+#!/usr/bin/env python3
+"""AI314 经验闭环入口（两端 hook 共用）。用法见 `ai314-lessons -h`。"""
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from lessons import cli  # noqa: E402
+
+raise SystemExit(cli.main(sys.argv[1:]))
