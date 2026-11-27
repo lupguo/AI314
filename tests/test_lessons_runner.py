@@ -182,5 +182,48 @@ class BackoffTest(unittest.TestCase):
         self.assertEqual(backoff.blocked("distill", self.env, now=2), "bad_output")
 
 
+class CommandsTest(unittest.TestCase):
+    def setUp(self):
+        self.home = tmp_home()
+        self.env = {"AI314_HOME": str(self.home), "HOME": str(self.home), "PATH": os.environ["PATH"]}
+
+    def tearDown(self):
+        shutil.rmtree(self.home, ignore_errors=True)
+
+    def run_cli(self, *argv):
+        import contextlib
+        import io
+
+        from lessons import cli
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cli.main(list(argv), env=self.env)
+        return rc, buf.getvalue()
+
+    def test_doctor_stub_ok(self):
+        out_json = self.home / "out.json"
+        out_json.write_text(json.dumps({"type": "result", "is_error": False, "result": '{"ok":1}'}))
+        stub = stub_bin(self.home, "stub", f'cat >/dev/null; cat "{out_json}"')
+        (self.home / "config.toml").write_text(
+            f'[agent]\nrunner = "claude"\nbin = "{stub}"\n[network]\nprobe_url = "file://{stub}"\n')
+        rc, out = self.run_cli("doctor")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("network: ok", out)
+        self.assertIn("runner: ok", out)
+
+    def test_doctor_network_fail(self):
+        (self.home / "config.toml").write_text('[network]\nprobe_url = "http://127.0.0.1:9"\n[agent]\nbin = "/bin/echo"\n')
+        rc, out = self.run_cli("doctor")
+        self.assertEqual(rc, 1)
+        self.assertIn("network: fail", out)
+
+    def test_status_masks_proxy(self):
+        (self.home / "config.toml").write_text('[network]\nhttps_proxy = "http://user:pw@127.0.0.1:8118"\n')
+        rc, out = self.run_cli("status")
+        self.assertEqual(rc, 0)
+        self.assertIn("127.0.0.1:8118", out)
+        self.assertNotIn("pw", out)
+
+
 if __name__ == "__main__":
     unittest.main()

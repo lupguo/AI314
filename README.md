@@ -57,11 +57,25 @@ tests/e2e/verify.sh agy 0.3.0
 tests/e2e/verify.sh tclaude 0.3.0
 ```
 
-远程分发（推送 tag 后 CI 构建并推送 `dist` 分支；其他机器将 `dist` 分支 clone 到 `~/.ai314`，两端 SessionStart hook 每 6 小时在后台自动拉取并重装）已实现，详见设计文档。
+远程分发（推送 tag 后 CI 构建并推送 `dist` 分支；两端 SessionStart hook 每 6 小时在后台自动拉取并重装）已实现，详见设计文档。`~/.ai314` 同时存放用户配置，可能已存在，因此用 init + fetch 安装：
+
+```bash
+git init -q ~/.ai314 && cd ~/.ai314 && git remote add origin https://github.com/lupguo/AI314.git
+git fetch -q origin dist && git checkout -q -b dist --track origin/dist
+```
 
 ## 回流改进
 
 在业务项目中发现规范缺口时执行 `/ai314:contribute`：在 `~/.ai314-src` 开分支修改 `content/`，`make check` 后 `gh pr create`，review 合并后发布。
+
+## 经验闭环（lessons loop）
+
+插件安装即生效：每轮对话结束时 `Stop` hook 用纯脚本（0 token）从会话记录抓取纠正、返工、测试先挂后过、命令连续失败、用户直接 OK 等信号，写入业务项目 `.ai314/inbox.jsonl`（自带 gitignore）；攒够阈值后后台调用无头 Agent 提炼进 `docs/ai314/lessons.md`（随项目提交，宪法要求开工前阅读），可复用条目去业务化后汇总到 `~/.ai314/data/`；开启 `contribute` 后成熟经验自动向 AI314 提 PR。
+
+- 配置：`~/.ai314/config.toml`（示例见插件 `hooks/config.example.toml`）：Agent（claude/tclaude/agy/codex）、模型、代理、阈值、开关。
+- 开关：`mode = on|capture-only|off`、`contribute = false`（默认）；单项目关闭：`touch .ai314/disabled`。
+- 排障：`<插件目录>/hooks/ai314-lessons status` 查看生效配置与状态，`doctor` 真实验证网络与 runner；日志 `~/.ai314/data/logs/lessons.log`。
+- 设计：`docs/superpowers/specs/2026-11-27-lessons-loop-design.md`
 
 ## 文档
 
