@@ -23,6 +23,8 @@ def _distill(project: str, env) -> int:
             print("inbox empty")
             return 0
         ok = distill.run(proj, config.load(env), env)
+    if ok:
+        contribute.maybe_run(config.load(env), env)
     print("distill ok" if ok else f"distill failed, see {paths.data_dir(env) / 'logs/lessons.log'}")
     return 0 if ok else 1
 

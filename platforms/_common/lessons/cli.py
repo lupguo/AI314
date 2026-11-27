@@ -19,22 +19,34 @@ def _capture_locked(proj: inbox.Project, hi: hookio.HookInput, platform: str) ->
     key = str(hi.transcript)
     events, end = transcript.read(platform, hi.transcript, offsets.get(key, 0))
     sessions = st.setdefault("sessions", {})
-    sess = sessions.setdefault(hi.session, {})
+    sess = sessions.pop(hi.session, {})
+    sessions[hi.session] = sess  # 移到末尾：按最近活跃淘汰
+    sess["transcript"] = key
     proj.append(signals.extract(events, sess), {"platform": platform, "session": hi.session})
     offsets[key] = end
     for old in list(sessions)[:-MAX_SESSIONS]:
         sessions.pop(old, None)
+    live = {s.get("transcript") for s in sessions.values()}
+    st["offsets"] = {k: v for k, v in offsets.items() if k in live}
     proj.save_state(st)
 
 
 def _capture_work(proj, hi, platform, cfg, env) -> None:
     with proj.lock() as got:
         if not got:
+            proj.defer({"platform": platform, "transcript": str(hi.transcript), "session": hi.session,
+                        "cwd": hi.cwd})
             return
         proj.ensure()
         _capture_locked(proj, hi, platform)
-        if cfg.lessons["mode"] != "capture-only":
-            distill.maybe_run(proj, cfg, env)
+        for d in proj.take_deferred():
+            _capture_locked(proj, hookio.HookInput(Path(d["transcript"]), d.get("cwd", ""), d["session"]),
+                            d.get("platform", platform))
+        distilled = cfg.lessons["mode"] != "capture-only" and distill.maybe_run(proj, cfg, env)
+    if distilled:
+        # 回流可能耗时数十分钟：释放项目锁后再做，避免阻塞后续 capture
+        from . import contribute
+        contribute.maybe_run(cfg, env)
 
 
 def _detach() -> bool:

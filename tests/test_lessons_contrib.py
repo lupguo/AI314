@@ -18,7 +18,7 @@ case "$1 $2" in
   "api repos/lupguo/AI314") echo "${GH_PUSH:-true}";;
   "api user") echo tester;;
   "repo fork") exit 0;;
-  "pr create") echo "https://github.com/lupguo/AI314/pull/7";;
+  "pr create") [ -n "$PR_FAIL" ] && exit 1; echo "https://github.com/lupguo/AI314/pull/7";;
 esac
 '''
 
@@ -38,6 +38,9 @@ class ContribTest(unittest.TestCase):
         sh("git", "clone", "-q", str(self.bare), str(self.src))
         sh("git", "-C", str(self.src), "config", "user.email", "t@t")
         sh("git", "-C", str(self.src), "config", "user.name", "t")
+        # 回流必须以 upstream 为准，而不是 src 的 origin：把 upstream URL 重定向到本地 bare 仓库
+        sh("git", "-C", str(self.src), "config", f"url.{self.bare}.insteadOf", "https://github.com/lupguo/AI314.git")
+        sh("git", "-C", str(self.src), "remote", "set-url", "origin", str(self.t / "not-upstream.git"))
         (self.bin / "gh").write_text(GH_STUB)
         (self.bin / "gh").chmod(0o755)
         self.env = {"AI314_HOME": str(self.home), "HOME": str(self.home), "GH_LOG": str(self.t / "gh.log"),
@@ -129,6 +132,16 @@ class ContribTest(unittest.TestCase):
         self.assertIn("check_failed", (self.home / "data/logs/lessons.log").read_text())
         wt = subprocess.run(["git", "-C", str(self.src), "worktree", "list"], capture_output=True, text=True).stdout
         self.assertEqual(len(wt.strip().splitlines()), 1)
+
+    def test_pr_failure_deletes_remote_branch(self):
+        self.stub_runner(self.files_result())
+        self.seed_pending()
+        env = dict(self.env, PR_FAIL="1")
+        contribute.maybe_run(config.load(env), env)
+        heads = subprocess.run(["git", "-C", str(self.bare), "branch", "--list", "lessons/*"],
+                               capture_output=True, text=True).stdout
+        self.assertEqual(heads.strip(), "")
+        self.assertEqual(len(store.global_pending(env)["stack-go-microservice"]), 3)
 
     def test_rejects_path_escape(self):
         self.stub_runner(self.files_result(path="content/L1-stacks/stack-go-microservice/../../../ai314.toml"))

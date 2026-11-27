@@ -12,6 +12,7 @@ from . import backoff, paths, runner, store
 
 OWNER_RE = re.compile(r"^(L0|project|(stack|mode)-[a-z0-9-]+|new-stack:[a-z0-9-]+)$")
 STALE_SECONDS = 7 * 86400
+MAX_BATCH = 60  # 单次提炼的信号上限：控制 prompt 体积（agy 以 argv 传参受 ARG_MAX 限制）
 PLUGIN_SKILLS = Path(__file__).resolve().parents[2] / "skills"
 
 PROMPT = """你是 AI314 工程规范的经验提炼器。下面是某个项目中 AI Agent 被用户纠正、返工、测试失败、或用户直接回复 OK 的原始信号片段。
@@ -49,10 +50,11 @@ def should_run(items: list[dict], cfg, now: float | None = None) -> bool:
     return len(items) >= 3 and _age(items[0], now) >= STALE_SECONDS
 
 
-def maybe_run(project, cfg, env) -> None:
+def maybe_run(project, cfg, env) -> bool:
     items = project.items()
     if items and should_run(items, cfg) and not backoff.blocked("distill", env):
-        run(project, cfg, env)
+        return run(project, cfg, env)
+    return False
 
 
 def _owners() -> list[str]:
@@ -125,9 +127,9 @@ def _apply_oks(out, oks, today, pid) -> list[dict]:
 
 
 def run(project, cfg, env, today: str | None = None) -> bool:
-    """调用方需持有项目锁。失败时 inbox 原样保留并进入退避。"""
+    """调用方需持有项目锁；回流由调用方在释放锁后触发。失败时 inbox 原样保留并进入退避。"""
     today = today or dt.date.today().isoformat()
-    items = project.items()
+    items = project.items()[:MAX_BATCH]
     md = project.root / "docs/ai314/lessons.md"
     lessons, oks = store.load(md)
     owners = _owners()
@@ -151,6 +153,4 @@ def run(project, cfg, env, today: str | None = None) -> bool:
     project.drop(len(items))
     backoff.ok("distill", env)
     paths.log(f"[distill] {project.root} ok: {len(items)} signals, {len(glob)} global, {len(ok_recs)} ok", env)
-    from . import contribute
-    contribute.maybe_run(cfg, env)
     return True

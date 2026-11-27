@@ -124,13 +124,18 @@ def maybe_run(cfg, env) -> None:
                 paths.log(f"[contribute] {owner} {type(e).__name__}: {e}", env)
 
 
-def _worktree(src: Path, owner: str, env) -> tuple[Path, str]:
+def _upstream_url(cfg) -> str:
+    # 以 upstream 为准：src 的 origin 可能是用户自己的 fork 或其他仓库
+    return f"https://github.com/{cfg.lessons['upstream']}.git"
+
+
+def _worktree(src: Path, owner: str, cfg, env) -> tuple[Path, str]:
     branch = f"lessons/{owner.replace(':', '-')}-{time.strftime('%Y%m%d-%H%M%S')}"
     wt = paths.data_dir(env) / "worktrees" / branch.replace("/", "_")
     wt.parent.mkdir(parents=True, exist_ok=True)
-    _run(["git", "-C", str(src), "fetch", "-q", "origin", "main"], env)
+    _run(["git", "-C", str(src), "fetch", "-q", _upstream_url(cfg), "main"], env)
     # 独立 worktree：不切换用户在 src 中的当前分支
-    _run(["git", "-C", str(src), "worktree", "add", "-q", "-b", branch, str(wt), "origin/main"], env)
+    _run(["git", "-C", str(src), "worktree", "add", "-q", "-b", branch, str(wt), "FETCH_HEAD"], env)
     return wt, branch
 
 
@@ -183,18 +188,20 @@ def _body(owner: str, recs: list[dict], adopted: list[int]) -> str:
             f"## 证据（匿名项目 id）\n| 项目 | 次数 |\n| :-- | :-- |\n{rows}\n")
 
 
-def _push(wt: Path, branch: str, cfg, env) -> str:
+def _push(wt: Path, branch: str, cfg, env) -> tuple[str, str]:
+    """返回 (PR 的 --head, 推送目标 URL)。"""
     gh, up = _gh(env), cfg.lessons["upstream"]
     perm = subprocess.run([gh, "api", f"repos/{up}", "--jq", ".permissions.push"], env=env,
                           capture_output=True, text=True).stdout.strip()
     if perm == "true":
-        _run(["git", "-C", str(wt), "push", "-q", "origin", f"HEAD:refs/heads/{branch}"], env)
-        return branch
+        url = _upstream_url(cfg)
+        _run(["git", "-C", str(wt), "push", "-q", url, f"HEAD:refs/heads/{branch}"], env)
+        return branch, url
     _run([gh, "repo", "fork", up, "--clone=false"], env)
     login = _run([gh, "api", "user", "--jq", ".login"], env)
     fork = f"https://github.com/{login}/{up.split('/')[-1]}.git"
     _run(["git", "-C", str(wt), "push", "-q", fork, f"HEAD:refs/heads/{branch}"], env)
-    return f"{login}:{branch}"
+    return f"{login}:{branch}", fork
 
 
 def _publish(owner, recs, out, wt, branch, cfg, env) -> str:
@@ -203,19 +210,24 @@ def _publish(owner, recs, out, wt, branch, cfg, env) -> str:
     title = f"feat({_scope(owner)}): {subject[:60]}"
     _run(["git", "-C", str(wt), "add", "-A"], env)
     _run(["git", "-C", str(wt), "commit", "-qm", title + "\n\n由 AI314 lessons loop 自动生成。"], env)
-    head = _push(wt, branch, cfg, env)
+    head, remote = _push(wt, branch, cfg, env)
     argv = [_gh(env), "pr", "create", "--repo", cfg.lessons["upstream"], "--base", "main", "--head", head,
             "--title", title, "--body", _body(owner, recs, adopted)]
     if owner in DRAFT or owner.startswith("new-stack:"):
         argv.append("--draft")
-    url = (_run(argv, env).splitlines() or [""])[-1]
+    try:
+        url = (_run(argv, env).splitlines() or [""])[-1]
+    except GitError:
+        # PR 未建成：删除已推送的远端分支，避免残留；条目保持 pending 等待下次
+        subprocess.run(["git", "-C", str(wt), "push", "-q", remote, "--delete", branch], env=env, capture_output=True)
+        raise
     store.global_mark(owner, [recs[i]["_i"] for i in adopted], "submitted", env, pr=url)
     return url
 
 
 def run_owner(owner: str, recs: list[dict], cfg, env) -> str | None:
     src = Path(cfg.lessons["src"])
-    wt, branch = _worktree(src, owner, env)
+    wt, branch = _worktree(src, owner, cfg, env)
     _touch(owner, env)  # 无论成败，同一 owner 24h 内不重复尝试
     try:
         out = runner.ask(_prompt(owner, recs, wt, env), cfg, "contribute", env, wt)

@@ -81,12 +81,14 @@ class RunnerTest(unittest.TestCase):
     def test_build_argv_each_runner(self):
         a = {"model": "M", "extra_args": ["--x"], "timeout": 60}
         self.assertEqual(runner.build("claude", "/b/claude", a, "P"),
-                         (["/b/claude", "-p", "--output-format", "json", "--model", "M", "--x"], "P"))
+                         (["/b/claude", "-p", "--output-format", "json", "--tools", "", "--strict-mcp-config",
+                          "--permission-mode", "default", "--model", "M", "--x"], "P"))
         self.assertEqual(runner.build("tclaude", "/b/tclaude", dict(a, model=""), "P"),
-                         (["/b/tclaude", "-p", "--output-format", "json", "--x"], "P"))
+                         (["/b/tclaude", "-p", "--output-format", "json", "--tools", "", "--strict-mcp-config",
+                          "--permission-mode", "default", "--x"], "P"))
         self.assertEqual(runner.build("agy", "/b/agy", a, "P"),
                          (["/b/agy", "--output-format", "json", "--print-timeout", "60s",
-                           "--disable-slash-commands", "--model", "M", "--x", "-p", "P"], None))
+                           "--disable-slash-commands", "--mode", "plan", "--sandbox", "--model", "M", "--x", "-p", "P"], None))
         self.assertEqual(runner.build("codex", "/b/codex", a, "P"),
                          (["/b/codex", "exec", "-c", 'model="M"', "--sandbox", "read-only", "--x", "-"], "P"))
 
@@ -150,6 +152,14 @@ class RunnerTest(unittest.TestCase):
             runner.ask("hi", cfg, "distill", self.env, self.home)
         self.assertEqual(cm.exception.kind, "network")
         self.assertFalse(mark.exists())
+
+    def test_ask_oserror_is_runerror(self):
+        (self.home / "config.toml").write_text(
+            f'[agent]\nrunner = "agy"\nbin = "/bin/echo"\n[network]\nprobe_url = "file:///bin/echo"\n')
+        cfg = config.load(self.env)
+        with self.assertRaises(runner.RunError) as cm:
+            runner.ask("x" * 4_000_000, cfg, "distill", self.env, self.home)
+        self.assertEqual(cm.exception.kind, "bad_output")
 
     def test_classify(self):
         self.assertEqual(runner.classify("dial tcp: connection refused"), "network")

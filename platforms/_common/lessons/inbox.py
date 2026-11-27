@@ -62,33 +62,80 @@ class Project:
         tmp.write_text(json.dumps(s, ensure_ascii=False), encoding="utf-8")
         tmp.replace(self.dir / "state.json")
 
+    def defer(self, record: dict) -> None:
+        """锁被占用时登记 transcript，由当前持锁者补处理（该会话可能不会再有 Stop）。"""
+        self.dir.mkdir(exist_ok=True)
+        with (self.dir / "pending.jsonl").open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    def take_deferred(self) -> list[dict]:
+        src = self.dir / "pending.jsonl"
+        if not src.exists():
+            return []
+        mine = self.dir / f"pending.{os.getpid()}.jsonl"
+        src.replace(mine)  # 改名后读取：期间新的登记会写入新文件，留待下次
+        rows = [json.loads(x) for x in mine.read_text(encoding="utf-8").splitlines() if x.strip()]
+        mine.unlink()
+        return rows
+
     @contextlib.contextmanager
     def lock(self):
         with file_lock(self.dir / "lock") as got:
             yield got
 
 
-@contextlib.contextmanager
-def file_lock(path: Path):
-    """O_EXCL 锁；超过 STALE_LOCK 秒视为崩溃残留并接管。"""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    got = False
-    for _ in range(2):
+def _holder_alive(path: Path) -> bool:
+    try:
+        pid = int(path.read_text(encoding="utf-8").strip() or "0")
+    except (OSError, ValueError):
+        pid = 0
+    if pid <= 0:  # 无法识别持有者：仅按时间判断残留
         try:
-            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
-            got = True
-            break
-        except FileExistsError:
-            try:
-                if time.time() - path.stat().st_mtime > STALE_LOCK:
-                    path.unlink()
-                    continue
-            except FileNotFoundError:
-                continue
-            break
+            return time.time() - path.stat().st_mtime < STALE_LOCK
+        except FileNotFoundError:
+            return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def _try_acquire_once(path: Path) -> bool:
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return False
+    with os.fdopen(fd, "w") as f:
+        f.write(str(os.getpid()))
+    return True
+
+
+def _try_acquire(path: Path) -> bool:
+    if _try_acquire_once(path):
+        return True
+    if _holder_alive(path):
+        return False
+    with contextlib.suppress(FileNotFoundError):
+        path.unlink()  # 持有者已退出：接管残留锁
+    return _try_acquire_once(path)
+
+
+@contextlib.contextmanager
+def file_lock(path: Path, wait: float = 0):
+    """PID 锁：持有者进程不存在才视为残留；释放时只删除自己持有的锁。wait>0 时轮询等待。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.time() + wait
+    got = _try_acquire(path)
+    while not got and time.time() < deadline:
+        time.sleep(0.1)
+        got = _try_acquire(path)
     try:
         yield got
     finally:
         if got:
-            with contextlib.suppress(FileNotFoundError):
-                path.unlink()
+            with contextlib.suppress(OSError, ValueError):
+                if path.read_text(encoding="utf-8").strip() == str(os.getpid()):
+                    path.unlink()

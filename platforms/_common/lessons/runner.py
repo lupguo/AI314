@@ -11,6 +11,9 @@ from pathlib import Path
 from . import netcheck
 
 ORDER = ("claude", "tclaude", "agy", "codex")
+# prompt 内含不可信的会话片段：一律禁用工具 / MCP，防止提示注入借用户的权限配置执行操作
+CLAUDE_NO_TOOLS = ["--tools", "", "--strict-mcp-config", "--permission-mode", "default"]
+AGY_NO_TOOLS = ["--mode", "plan", "--sandbox"]  # 不带 --dangerously-skip-permissions，工具请求在 print 模式被拒绝
 EXTRA_DIRS = ("~/.local/bin", "/opt/homebrew/bin", "/usr/local/bin")
 NET_RE = re.compile(r"EOF|timeout|timed out|connection|dial tcp|proxy|ECONNREFUSED|ENOTFOUND|SSL|TLS|"
                     r"network|Eligibility check failed", re.I)
@@ -62,13 +65,13 @@ def build(name: str, bin_: str, agent: dict, prompt: str) -> tuple[list[str], st
     if name == "agy":
         # 真机验证：agy 的 -p 必须紧跟 prompt 参数，不读 stdin
         argv = [bin_, "--output-format", "json", "--print-timeout", f"{agent.get('timeout', 300)}s",
-                "--disable-slash-commands"]
+                "--disable-slash-commands", *AGY_NO_TOOLS]
         argv += ["--model", model] if model else []
         return argv + extra + ["-p", prompt], None
     if name == "codex":
         argv = [bin_, "exec"] + (["-c", f'model="{model}"'] if model else [])
         return argv + ["--sandbox", "read-only"] + extra + ["-"], prompt
-    argv = [bin_, "-p", "--output-format", "json"] + (["--model", model] if model else [])
+    argv = [bin_, "-p", "--output-format", "json", *CLAUDE_NO_TOOLS] + (["--model", model] if model else [])
     return argv + extra, prompt
 
 
@@ -154,6 +157,8 @@ def ask(prompt: str, cfg, stage: str, env, cwd: Path) -> dict:
                            env=child, timeout=agent.get("timeout", 300))
     except subprocess.TimeoutExpired:
         raise RunError("network", f"timeout after {agent.get('timeout')}s") from None
+    except OSError as e:  # 如 prompt 作为 argv 超过 ARG_MAX（E2BIG）
+        raise RunError("bad_output", f"spawn failed: {e}") from None
     if r.returncode != 0 and not r.stdout.strip():
         raise RunError(classify(r.stderr), r.stderr)
     return extract_json(unwrap(name, r.stdout))

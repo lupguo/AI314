@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import paths
+from .inbox import file_lock
 
 HEADER = "# 项目经验（AI314 自动维护，可手改）"
 MAX_LINES, STALE_DAYS = 150, 30
@@ -96,6 +97,11 @@ def save(path: Path, lessons: list[Lesson], oks: list[OkDefault], archive: Path,
     path.write_text(render(keep, oks), encoding="utf-8")
 
 
+def _glock(env):
+    # 多个项目的后台进程可能同时读写全局库
+    return file_lock(paths.data_dir(env) / "lessons" / ".lock", wait=10)
+
+
 def _gfile(owner: str, env) -> Path:
     return paths.data_dir(env) / "lessons" / (owner.replace(":", "_") + ".jsonl")
 
@@ -104,8 +110,7 @@ def global_append(owner: str, records: list[dict], env=os.environ) -> None:
     if not records:
         return
     f = _gfile(owner, env)
-    f.parent.mkdir(parents=True, exist_ok=True)
-    with f.open("a", encoding="utf-8") as fh:
+    with _glock(env), f.open("a", encoding="utf-8") as fh:
         for r in records:
             fh.write(json.dumps({"owner": owner, "status": "pending", **r}, ensure_ascii=False) + "\n")
 
@@ -133,11 +138,12 @@ def global_pending(env=os.environ) -> dict[str, list[dict]]:
 
 def global_mark(owner: str, idxs: list[int], status: str, env=os.environ, **extra) -> None:
     f = _gfile(owner, env)
-    rows = _gread(f)
-    for i in idxs:
-        if 0 <= i < len(rows):
-            rows[i].update(status=status, **extra)
-    f.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
+    with _glock(env):
+        rows = _gread(f)
+        for i in idxs:
+            if 0 <= i < len(rows):
+                rows[i].update(status=status, **extra)
+        f.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
 
 
 def register_project(pid: str, root: Path, env=os.environ) -> None:

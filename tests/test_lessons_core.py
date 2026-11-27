@@ -189,6 +189,51 @@ class CaptureTest(unittest.TestCase):
             self.capture()
         self.assertEqual(p.items(), [])
 
+    def test_lock_owner_only_unlinks_own(self):
+        p = inbox.Project(self.proj.resolve())
+        p.ensure()
+        lockf = p.dir / "lock"
+        with p.lock() as got:
+            self.assertTrue(got)
+            lockf.write_text("999999999")  # 模拟被他人接管
+        self.assertTrue(lockf.exists())
+        with p.lock() as got:  # 持有者进程已不存在：视为残留并接管
+            self.assertTrue(got)
+        self.assertFalse(lockf.exists())
+
+    def test_busy_lock_defers_transcript(self):
+        p = inbox.Project(self.proj.resolve())
+        p.ensure()
+        with p.lock():
+            self.capture()
+        self.assertEqual(p.items(), [])
+        other = self.home / "t2.jsonl"
+        shutil.copy(FIX / "claude.jsonl", other)
+        # 被推迟的会话可能不会再有 Stop：由下一个拿到锁的（另一会话的）capture 补处理
+        cli.capture("claude", json.dumps({"transcript_path": str(other), "cwd": str(self.proj),
+                                          "session_id": "s2"}), self.env, foreground=True)
+        self.assertEqual(len(p.items()), 10)
+        self.assertEqual({i["session"] for i in p.items()}, {"s1", "s2"})
+        self.assertEqual(p.state()["offsets"][str(self.tr)], self.tr.stat().st_size)
+
+    def test_offsets_pruned_with_sessions(self):
+        for i in range(25):
+            t = self.home / f"s{i}.jsonl"
+            shutil.copy(FIX / "claude.jsonl", t)
+            cli.capture("claude", json.dumps({"transcript_path": str(t), "cwd": str(self.proj),
+                                              "session_id": f"s{i}"}), self.env, foreground=True)
+        st = inbox.Project(self.proj.resolve()).state()
+        self.assertEqual(len(st["sessions"]), 20)
+        self.assertEqual(len(st["offsets"]), 20)
+
+    def test_entry_guard_old_python(self):
+        stub = self.home / "py39"
+        stub.write_text("#!/bin/sh\nexit 1\n")
+        stub.chmod(0o755)
+        r = subprocess.run([str(ENTRY), "status"], env=dict(self.env, AI314_PYTHON=str(stub)),
+                           capture_output=True, text=True)
+        self.assertEqual((r.returncode, r.stdout), (0, ""))
+
     def test_entry_script_runs(self):
         r = subprocess.run([str(ENTRY), "status"], cwd=self.proj, env=self.env, capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)

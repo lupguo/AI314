@@ -32,3 +32,19 @@
 ## 4. 清理
 
 已删除模拟沙盘 `/tmp/ai314-sim`（包括全局库、桩 gh、bare 仓库）以及两个测试项目（连同其中的 inbox、lessons、注入的信号）。真实的 `~/.ai314/` 下只保留 `config.toml`。验收过程中 agy 自身的会话记录（位于 `~/.gemini/antigravity-cli/brain/`）未做处理。
+
+## 5. 独立审查后的修复与复测
+
+整分支审查共发现 9 个问题，均已先写失败测试再修复：
+
+- 入口改为 sh 包装：自动挑选 ≥3.11 的解释器，找不到就静默退出（系统 python3 为 3.9 时原来每轮都会报错）；
+- 无头调用禁用工具：claude 加 `--tools "" --strict-mcp-config --permission-mode default`，agy 加 `--mode plan --sandbox`。真机验证：工具请求被拒绝；
+- 锁：锁文件记录持有者 PID，只有 PID 失效才接管，释放时只删自己的锁；
+- 回流移到项目锁释放之后执行；
+- 锁被占用时登记推迟队列，由下一个拿到锁的进程补处理；
+- 单次提炼上限 60 条；spawn 抛出的 `OSError` 纳入退避；
+- 回流统一通过 upstream URL 拉取和推送；PR 创建失败时删除已推送的远端分支；
+- 全局库读写加锁；
+- 会话按最近使用淘汰，transcript 偏移随会话一起清理。
+
+复测结果：`make check` 全绿（107 个测试）。重装 agy 后，在 `PATH=/usr/bin:/bin` 下 `doctor` 通过，真机 2 轮会话正确写入了 `correction`。复测项目已删除。

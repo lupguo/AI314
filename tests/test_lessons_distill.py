@@ -148,6 +148,24 @@ class DistillTest(unittest.TestCase):
         self.assertEqual([x.title for x in ls], ["好"])
         self.assertEqual(list(store.global_pending(env)), ["L0"])
 
+    def test_batch_cap_keeps_rest(self):
+        self.proj.append([sig() for _ in range(distill.MAX_BATCH + 7)], {"session": "s"})
+        env = make_env(self.home, {"lessons": [], "ok_patterns": []})
+        self.assertTrue(distill.run(self.proj, config.load(env), env, today=TODAY))
+        self.assertEqual(len(self.proj.items()), 7)
+
+    def test_distill_does_not_contribute_inline(self):
+        self.seed()
+        env = make_env(self.home, {"lessons": [], "ok_patterns": []})
+        import lessons.contribute as c
+        called = []
+        orig, c.maybe_run = c.maybe_run, lambda *a: called.append(1)
+        try:
+            distill.run(self.proj, config.load(env), env, today=TODAY)
+        finally:
+            c.maybe_run = orig
+        self.assertEqual(called, [])
+
     def test_maybe_run_respects_backoff(self):
         self.proj.append([sig() for _ in range(15)], {"session": "s"})
         env = make_env(self.home, "not json")
