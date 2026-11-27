@@ -5,7 +5,7 @@ import json
 import shutil
 from pathlib import Path
 
-from ai314build.build import copy_skills
+from ai314build.build import copy_lessons, copy_skills
 
 COMMON = Path(__file__).resolve().parent.parent / "_common"
 
@@ -29,10 +29,21 @@ def write(project, rule_text: str, out_dir: Path) -> None:
     # 远程自动更新：AGY 插件 hooks.json 位于插件根，按插件名分组；命令相对插件根执行
     (out_dir / "hooks").mkdir()
     shutil.copy2(COMMON / "auto-update", out_dir / "hooks/auto-update")
-    (out_dir / "hooks.json").write_text(json.dumps({project.name: {"SessionStart": [{
-        "type": "command",
-        # 不依赖 hook 的 cwd：用安装目录的绝对路径；脚本不存在时静默跳过。stdout 只输出 {}
-        "command": ('f="$HOME/.gemini/config/plugins/' + project.name + '/hooks/auto-update"; '
-                    '[ -x "$f" ] && ("$f" antigravity >/dev/null 2>&1 </dev/null &); echo \'{}\''),
-        "timeout": 5,
-    }]}}, indent=2) + "\n", encoding="utf-8")
+    copy_lessons(out_dir / "hooks")
+    hook_dir = '$HOME/.gemini/config/plugins/' + project.name + '/hooks'
+    (out_dir / "hooks.json").write_text(json.dumps({project.name: {
+        "SessionStart": [{
+            "type": "command",
+            # 不依赖 hook 的 cwd：用安装目录的绝对路径；脚本不存在时静默跳过。stdout 只输出 {}
+            "command": (f'f="{hook_dir}/auto-update"; '
+                        '[ -x "$f" ] && ("$f" antigravity >/dev/null 2>&1 </dev/null &); echo \'{}\''),
+            "timeout": 5,
+        }],
+        # 经验捕获：stdin 交给脚本读取后自行 fork 到后台
+        "Stop": [{
+            "type": "command",
+            "command": (f'f="{hook_dir}/ai314-lessons"; '
+                        '[ -x "$f" ] && "$f" capture --platform antigravity >/dev/null 2>&1; echo \'{}\''),
+            "timeout": 5,
+        }],
+    }}, indent=2) + "\n", encoding="utf-8")

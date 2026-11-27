@@ -9,6 +9,9 @@ from pathlib import Path
 from .model import Project
 
 INDEX_MARK = "<!-- AI314:SKILL-INDEX -->"
+COMMON = Path(__file__).resolve().parents[2] / "platforms/_common"
+# dist 分支即 ~/.ai314 的内容：用户配置与经验数据与之同目录，必须忽略以保持工作区干净（auto-update 依赖）
+DIST_GITIGNORE = "config.toml\ndata/\n"
 PLATFORMS = ("claude", "antigravity")
 
 
@@ -40,12 +43,22 @@ def copy_skills(project: Project, dest: Path) -> None:
         shutil.copytree(s.src_dir, dest / s.name, ignore=shutil.ignore_patterns(".DS_Store"))
 
 
+def copy_lessons(dest: Path) -> None:
+    """经验闭环运行时（两端共用）：hooks/ai314-lessons + hooks/lessons/ + 配置示例。"""
+    dest.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(COMMON / "lessons", dest / "lessons", ignore=shutil.ignore_patterns("__pycache__", ".DS_Store"))
+    for name in ("ai314-lessons", "config.example.toml"):
+        shutil.copy2(COMMON / name, dest / name)
+
+
 def build_all(project: Project, out: Path, platforms: list[str]) -> None:
     unknown = [p for p in platforms if p not in PLATFORMS]
     if unknown:
         raise SystemExit(f"未知平台: {unknown}，可选 {list(PLATFORMS)}")
     rule_text = render_rule(project)
     out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / ".gitignore").write_text(DIST_GITIGNORE, encoding="utf-8")
     for plat in platforms:
         target = out / plat
         if target.exists():

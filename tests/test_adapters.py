@@ -49,6 +49,29 @@ class AdapterTest(unittest.TestCase):
         self.assertIn("/plugins/ai314/hooks/auto-update", hooks["ai314"]["SessionStart"][0]["command"])
         self.assertTrue(os.access(a / "hooks/auto-update", os.X_OK))
 
+    def test_claude_stop_hook(self):
+        c = self.out / "claude"
+        hooks = json.loads((c / "hooks/hooks.json").read_text())
+        cmd = hooks["hooks"]["Stop"][0]["hooks"][0]["command"]
+        self.assertIn('ai314-lessons" capture --platform claude', cmd)
+        self.assertTrue(os.access(c / "hooks/ai314-lessons", os.X_OK))
+        self.assertTrue((c / "hooks/lessons/cli.py").is_file())
+        self.assertTrue((c / "hooks/config.example.toml").is_file())
+        self.assertFalse((c / "hooks/lessons/__pycache__").exists())
+
+    def test_agy_stop_hook(self):
+        a = self.out / "antigravity"
+        stop = json.loads((a / "hooks.json").read_text())["ai314"]["Stop"][0]
+        self.assertIn("/plugins/ai314/hooks/ai314-lessons", stop["command"])
+        self.assertIn("capture --platform antigravity", stop["command"])
+        self.assertTrue(stop["command"].endswith("echo '{}'"))
+        self.assertEqual(stop["timeout"], 5)
+        self.assertTrue(os.access(a / "hooks/ai314-lessons", os.X_OK))
+        self.assertTrue((a / "hooks/lessons/runner.py").is_file())
+
+    def test_dist_gitignore(self):
+        self.assertEqual((self.out / ".gitignore").read_text(), "config.toml\ndata/\n")
+
     def test_session_start_json_escaping(self):
         c = self.out / "claude"
         env = dict(os.environ, CLAUDE_PLUGIN_ROOT=str(c))

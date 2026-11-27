@@ -5,7 +5,7 @@ import json
 import shutil
 from pathlib import Path
 
-from ai314build.build import copy_skills
+from ai314build.build import copy_lessons, copy_skills
 
 HERE = Path(__file__).resolve().parent
 COMMON = HERE.parent / "_common"
@@ -31,10 +31,16 @@ def write(project, rule_text: str, out_dir: Path) -> None:
     hooks.mkdir()
     shutil.copy2(HERE / "hooks/session-start", hooks / "session-start")
     shutil.copy2(COMMON / "auto-update", hooks / "auto-update")
-    _dump(hooks / "hooks.json", {"hooks": {"SessionStart": [{
-        "matcher": "startup|clear|compact",
-        "hooks": [{"type": "command", "command": '"${CLAUDE_PLUGIN_ROOT}/hooks/session-start"'}],
-    }]}})
+    copy_lessons(hooks)
+    _dump(hooks / "hooks.json", {"hooks": {
+        "SessionStart": [{
+            "matcher": "startup|clear|compact",
+            "hooks": [{"type": "command", "command": '"${CLAUDE_PLUGIN_ROOT}/hooks/session-start"'}],
+        }],
+        # 经验捕获：脚本读完 stdin 即 fork 到后台，不阻塞会话
+        "Stop": [{"hooks": [{"type": "command",
+                             "command": '"${CLAUDE_PLUGIN_ROOT}/hooks/ai314-lessons" capture --platform claude'}]}],
+    }})
     copy_skills(project, out_dir / "skills")
     # marketplace 位于产物根，供 `plugin marketplace add <dist>` 使用
     _dump(out_dir.parent / ".claude-plugin/marketplace.json", {
