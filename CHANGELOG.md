@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.0 - 2026-11-27
+
+- 新增经验自动回流闭环（lessons loop）：Stop hook 0 token 捕获纠正/返工/测试先挂后过/命令连续失败/OK 信号，按阈值无头提炼为项目 docs/ai314/lessons.md 并汇总全局库，可选自动向 upstream 提 PR；Agent/模型/代理统一配置于 ~/.ai314/config.toml
+
 ## v0.3.0 - 2026-11-27
 
 - 宪法精简为 14 条并对齐原稿意图；文档即契约改为 superpowers spec + docs/base 活文档；新增 ai314:docs-base-sync；planning/code-review/onboard 同步调整
