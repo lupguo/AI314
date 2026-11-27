@@ -1,0 +1,27 @@
+# AI314 经验闭环配置示例：复制为 ~/.ai314/config.toml 后按需修改；文件不存在时全部取默认值。
+# 禁止在此放置任何 Token / 密钥：认证由各 Agent CLI 自身登录态负责。
+
+[lessons]
+mode = "on"                 # on | capture-only | off
+contribute = false          # 自动向 upstream 提 PR（默认关闭）
+upstream = "lupguo/AI314"
+src = "~/.ai314-src"        # AI314 源码仓库本地 clone
+distill_min = 15            # 未处理反面信号达到该数即提炼
+contrib_min = 3             # 某归属待回流条目达到该数即回流
+
+[agent]                     # 无头 Agent；distill / contribute 继承
+runner = "agy"              # auto | claude | tclaude | agy | codex
+bin = ""                    # 留空按 runner 名查找 PATH（含 ~/.local/bin、/opt/homebrew/bin）
+model = "gemini-4-hydrogen-medium"
+extra_args = []
+timeout = 300
+
+[agent.contribute]          # 可选：按阶段覆盖
+timeout = 900
+
+[network]                   # 仅注入无头子进程（大小写两份），不影响当前会话
+https_proxy = "http://127.0.0.1:8118"
+http_proxy = "http://127.0.0.1:8118"
+all_proxy = ""
+no_proxy = ""
+probe_url = ""              # 留空按 runner 取默认预检地址

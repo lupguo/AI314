@@ -6,6 +6,13 @@
         "command": "f=\"$HOME/.gemini/config/plugins/ai314/hooks/auto-update\"; [ -x \"$f\" ] && (\"$f\" antigravity >/dev/null 2>&1 </dev/null &); echo '{}'",
         "timeout": 5
       }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "f=\"$HOME/.gemini/config/plugins/ai314/hooks/ai314-lessons\"; [ -x \"$f\" ] && \"$f\" capture --platform antigravity >/dev/null 2>&1; echo '{}'",
+        "timeout": 5
+      }
     ]
   }
 }

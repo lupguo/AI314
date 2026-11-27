@@ -23,6 +23,7 @@ description: 当需要从当前项目代码逆向提炼一份可复用的 L1 技
 2. **目录拓扑与分层**：查看 `src/`、`internal/`、`cmd/` 或主工程目录的 2~3 层树状结构，识别模块职责与依赖方向。
 3. **工程化与门禁**：读取 `Makefile`、`scripts/`、`.github/workflows/`、Linter 配置（如 `.golangci.yml`、`eslint.config.*`、`ruff.toml`）。
 4. **典型代码范式**：抽样读取 1~2 个核心入口文件、数据访问层/网络封装层、错误/日志封装及典型单元测试文件，提炼编码习惯与避坑设计。
+5. **踩坑经验**：读取 `docs/ai314/lessons.md` 及 `~/.ai314/data/lessons/new-stack_*.jsonl` 中与本技术栈相关的条目，作为第 4 区块"反面禁令"的依据。
 
 ## 强制输出格式（严格按以下 4 个区块输出完整 Markdown）
 
