@@ -1,0 +1,33 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  publish-dist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: make check CLAUDE_BIN=__none__ AGY_BIN=__none__
+      # 在 dist 分支既有历史上追加一次提交（客户端更新器使用 pull --ff-only，禁止重写历史）
+      - name: publish dist branch
+        run: |
+          git config user.name "ai314-release"
+          git config user.email "ai314-release@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin dist >/dev/null; then
+            git worktree add ../dist-branch origin/dist
+            git -C ../dist-branch switch -c dist
+          else
+            git worktree add --orphan -b dist ../dist-branch
+          fi
+          find ../dist-branch -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -R dist/. ../dist-branch/
+          git -C ../dist-branch add -A
+          git -C ../dist-branch commit -qm "release ${GITHUB_REF_NAME}" || echo "no changes"
+          git -C ../dist-branch push origin dist
