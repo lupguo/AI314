@@ -94,14 +94,20 @@ class SignalsTest(unittest.TestCase):
         self.assertEqual(sigs["rework"]["files"], ["/p/app.py"])
 
     def test_state_carries_across_turns(self):
-        ev, _ = transcript.read("claude", FIX / "claude.jsonl", 0)
-        idx = [i for i, e in enumerate(ev) if e.role == "user"]
-        sess = {}
-        first = signals.extract(ev[:idx[1]], sess)
-        rest = signals.extract(ev[idx[1]:], json.loads(json.dumps(sess)) or sess)
-        kinds = {s["kind"] for s in first + rest}
-        self.assertIn("correction", kinds)
-        self.assertIn("test_flip", kinds)
+        # 真机 Stop hook 每轮增量读取：按用户消息切片，sess 经 JSON 往返模拟 state.json 持久化
+        for plat, name in (("claude", "claude.jsonl"), ("antigravity", "agy.jsonl")):
+            ev, _ = transcript.read(plat, FIX / name, 0)
+            idx = [i for i, e in enumerate(ev) if e.role == "user"] + [len(ev)]
+            sess, sigs = {}, []
+            for a, b in zip([0] + idx[1:-1], idx[1:]):
+                sigs += signals.extract(ev[a:b], sess)
+                sess = json.loads(json.dumps(sess))
+            by_kind = {s["kind"]: s for s in sigs}
+            self.assertEqual(set(by_kind), {"correction", "ok", "test_flip", "tool_fail", "rework"}, plat)
+            self.assertIn("lint 规则放宽", by_kind["correction"]["prev"], plat)
+            self.assertIn("make lint", by_kind["correction"]["prev"], plat)
+            self.assertIn("README", by_kind["ok"]["prev"], plat)
+            self.assertEqual(len([s for s in sigs if s["kind"] == "rework"]), 1, plat)
 
 
 class HookIoTest(unittest.TestCase):

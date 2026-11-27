@@ -39,8 +39,15 @@ def _last_question(text: str) -> str:
 class _Turn:
     """一轮 = 两条用户消息之间 AI 的回复与工具调用。"""
 
-    def __init__(self):
-        self.text, self.tools, self.files = "", [], []
+    def __init__(self, saved: dict | None = None):
+        saved = saved or {}
+        self.text, self.tools = saved.get("text", ""), list(saved.get("tools", []))
+        self.files = list(saved.get("files", []))
+        # 已在上次读取时计过返工次数的文件，避免跨读取重复计数
+        self.counted = set(self.files)
+
+    def dump(self) -> dict:
+        return {"text": self.text[-1500:], "tools": self.tools[-8:], "files": sorted(set(self.files))}
 
     def summary(self) -> str:
         tools = ", ".join(self.tools[-8:])
@@ -64,7 +71,8 @@ def _on_user(e: Event, turn: _Turn, sess: dict, out: list) -> None:
 def _close_turn(turn: _Turn, sess: dict, last_user: str, out: list) -> None:
     counts = sess.setdefault("edit_turns", {})
     reworked = sess.setdefault("reworked", [])
-    for f in sorted(set(turn.files)):
+    for f in sorted(set(turn.files) - turn.counted):
+        turn.counted.add(f)
         counts[f] = counts.get(f, 0) + 1
         if counts[f] >= REWORK_TURNS and f not in reworked:
             reworked.append(f)
@@ -96,7 +104,8 @@ def _on_result(e: Event, sess: dict, out: list) -> None:
 
 def extract(events: list[Event], sess: dict) -> list[dict]:
     """sess 为该会话的跨轮状态（JSON 可序列化），原地更新。"""
-    out, turn = [], _Turn()
+    # Stop hook 每轮只增量读取新内容：上一轮 AI 回复需从 sess 恢复，纠正/OK 才能关联到它
+    out, turn = [], _Turn(sess.get("turn"))
     last_user = sess.get("last_user", "")
     for e in events:
         if e.role == "user":
@@ -112,5 +121,6 @@ def extract(events: list[Event], sess: dict) -> list[dict]:
         elif e.role == "result":
             _on_result(e, sess, out)
     _close_turn(turn, sess, last_user, out)
+    sess["turn"] = turn.dump()
     sess["last_user"] = _cut(last_user, 300)
     return out
