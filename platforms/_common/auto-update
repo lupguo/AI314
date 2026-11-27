@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# AI314 远程自动更新器（两端共用）。用法：auto-update <claude|antigravity>
+# 仅当 ~/.ai314（AI314_HOME）是 dist 分支的 git clone 时工作；本地开发安装直接退出。
+set -u
+PLATFORM="${1:-claude}"
+HOME_DIR="${AI314_HOME:-$HOME/.ai314}"
+INTERVAL="${AI314_UPDATE_INTERVAL:-21600}"   # 6 小时
+STAMP="$HOME_DIR/.last-check"
+LOG="$HOME_DIR/.update.log"
+AGY="${AI314_AGY_BIN:-agy}"
+
+[ -d "$HOME_DIR/.git" ] || exit 0
+now=$(date +%s)
+if [ -f "$STAMP" ]; then
+  last=$(cat "$STAMP" 2>/dev/null || echo 0)
+  [ $((now - last)) -lt "$INTERVAL" ] && exit 0
+fi
+echo "$now" > "$STAMP"
+
+log() { echo "$(date '+%F %T') [$PLATFORM] $*" >> "$LOG"; }
+branch=$(git -C "$HOME_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null)
+[ "$branch" = "dist" ] || { log "skip: branch=$branch"; exit 0; }
+[ -z "$(git -C "$HOME_DIR" status --porcelain --untracked-files=no)" ] || { log "skip: dirty"; exit 0; }
+git -C "$HOME_DIR" fetch -q origin dist 2>>"$LOG" || { log "fetch failed"; exit 0; }
+if [ "$(git -C "$HOME_DIR" rev-parse HEAD)" = "$(git -C "$HOME_DIR" rev-parse origin/dist)" ]; then
+  log "up to date"; exit 0
+fi
+git -C "$HOME_DIR" pull -q --ff-only origin dist 2>>"$LOG" || { log "pull failed"; exit 0; }
+log "pulled $(git -C "$HOME_DIR" rev-parse --short HEAD)"
+if [ "$PLATFORM" = "antigravity" ]; then
+  "$AGY" plugin uninstall ai314 >>"$LOG" 2>&1
+  "$AGY" plugin install "$HOME_DIR/antigravity" >>"$LOG" 2>&1 && log "agy reinstalled" || log "agy reinstall failed"
+fi
+exit 0

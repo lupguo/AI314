@@ -29,10 +29,10 @@ description: 当需要把一个项目接入 AI314 规范、为项目选择或调
 用插件内脚本幂等写入（块外内容不变；存在 CLAUDE.md 时自动确保其含 `@AGENTS.md`）：
 
 ```sh
-printf '%s\n' '| `services/**` | ai314:stack-go-microservice |' | bash "<插件目录>/scripts/ai314-block.sh" <项目根>
+printf '%s\n' '| `services/**` | ai314:stack-go-microservice |' | bash "<本技能目录>/scripts/ai314-block.sh" <项目根>
 ```
 
-`<插件目录>` 为本技能所在插件的根目录（本文件上两级）。
+`<本技能目录>` 即本 SKILL.md 所在目录。
 
 ## 4. 项目骨架（仅缺失时创建）
 
