@@ -31,7 +31,7 @@ def classify(text: str) -> str:
     return "bad_output"
 
 
-def _which(name: str, env) -> str | None:
+def which(name: str, env) -> str | None:
     found = shutil.which(name, path=env.get("PATH", ""))
     if found:
         return found
@@ -51,7 +51,7 @@ def resolve(agent: dict, env) -> tuple[str, str]:
             raise RunError("no_runner", b)
         return (Path(b).name if name == "auto" else name), b
     for cand in (ORDER if name == "auto" else (name,)):
-        found = _which(cand, env)
+        found = which(cand, env)
         if found:
             return cand, found
     raise RunError("no_runner", name)
