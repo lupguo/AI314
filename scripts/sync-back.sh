@@ -1,161 +1,60 @@
 #!/usr/bin/env bash
+# 把旧版 init-project.sh 装配项目中被修改过的 stack-*/mode-* 副本，质检后回流到 AI314 源码仓库的新分支。
+# 用法：AI314_SRC=~/.ai314-src scripts/sync-back.sh <副本目录>... [--force]
+# 之后在源码仓库中 `make check`、提交并 `gh pr create`（见 ai314:contribute）。
 set -euo pipefail
-
-# ==============================================================================
-# AI314 (github.com/lupguo/AI314) 经验反向同步与质检脚本
-# 用法:
-#   ./sync-back.sh                        # 自动扫描当前项目 .agents/skills/stack-* 并同步
-#   ./sync-back.sh path/to/SKILL.md       # 指定单个 SKILL.md 文件同步
-#   ./sync-back.sh --force                # 跳过部分警告强制同步
-# ==============================================================================
-
-DEFAULT_HUB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HUB_DIR="${AI314_HUB:-$DEFAULT_HUB_DIR}"
+SRC="${AI314_SRC:-$HOME/.ai314-src}"
 FORCE=false
-TARGET_FILES=()
-
-for arg in "$@"; do
-  case $arg in
-    --force)
-      FORCE=true
-      shift
-      ;;
-    -h|--help)
-      echo "用法: $0 [path/to/SKILL.md] [--force]"
-      echo "说明: 将业务项目中沉淀或更新的 stack-* SKILL.md 质检后同步回 $HUB_DIR/stacks/"
-      exit 0
-      ;;
-    *)
-      if [[ -f "$arg" ]]; then
-        TARGET_FILES+=("$arg")
-      else
-        echo "❌ 错误: 找不到指定文件 [$arg]"
-        exit 1
-      fi
-      ;;
+DIRS=()
+for a in "$@"; do
+  case "$a" in
+    --force) FORCE=true ;;
+    -h|--help) sed -n '2,4p' "$0"; exit 0 ;;
+    *) [[ -d "$a" ]] || { echo "❌ 不是目录: $a" >&2; exit 1; }; DIRS+=("$a") ;;
   esac
 done
+[[ ${#DIRS[@]} -gt 0 ]] || { echo "❌ 请指定至少一个 stack-*/mode-* 目录" >&2; exit 1; }
+[[ -d "$SRC/.git" && -d "$SRC/content" ]] || { echo "❌ AI314 源码仓库不存在: $SRC" >&2; exit 1; }
 
-if [[ ! -d "$HUB_DIR/stacks" ]]; then
-  echo "❌ 错误: 中央仓库目录不存在 ($HUB_DIR/stacks)"
-  exit 1
-fi
-
-if [[ ${#TARGET_FILES[@]} -eq 0 ]]; then
-  if [[ -d ".agents/skills" ]]; then
-    while IFS= read -r -d '' file; do
-      TARGET_FILES+=("$file")
-    done < <(find .agents/skills -maxdepth 2 -path "*/stack-*/SKILL.md" -print0)
+validate() {  # $1=目录 $2=技能名；输出错误并返回非 0
+  local dir="$1" name="$2" md="$1/SKILL.md" errs=0
+  [[ -f "$md" ]] || { echo "  ❌ 缺少 SKILL.md"; return 1; }
+  [[ "$(head -n1 "$md")" == "---" ]] || { echo "  ❌ 首行必须是 frontmatter '---'"; errs=$((errs+1)); }
+  local fm_name desc
+  fm_name=$(awk '/^---$/{c++;next} c==1 && /^name:/{sub(/^name:[[:space:]]*/,"");print;exit}' "$md")
+  desc=$(awk '/^---$/{c++;next} c==1 && /^description:/{sub(/^description:[[:space:]]*/,"");print;exit}' "$md")
+  [[ "$fm_name" == "$name" ]] || { echo "  ❌ name '$fm_name' 与目录名 '$name' 不一致"; errs=$((errs+1)); }
+  [[ ${#desc} -ge 10 ]] || { echo "  ❌ description 缺失或过短"; errs=$((errs+1)); }
+  if [[ "$name" == stack-* ]]; then
+    for sec in "## 1." "## 2." "## 3." "## 4."; do
+      grep -q "^${sec}" "$md" || { echo "  ❌ 缺少章节 '${sec}'"; errs=$((errs+1)); }
+    done
   fi
-fi
-
-if [[ ${#TARGET_FILES[@]} -eq 0 ]]; then
-  echo "⚠️  未在当前项目发现任何 stack-*/SKILL.md 文件。"
-  echo "提示: 如果是新提炼的规范，请先保存至 .agents/skills/stack-<name>/SKILL.md 或直接传入文件路径。"
-  exit 0
-fi
-
-validate_skill() {
-  local file="$1"
-  local errors=0
-  local warnings=0
-
-  echo "🔍 正在质检: $file"
-
-  if ! head -n 1 "$file" | grep -qx "---"; then
-    echo "  ❌ [格式错误] 文件首行必须为 YAML Frontmatter 分隔符 '---'"
-    ((errors++))
+  if grep -rEqi "(sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{20,}|AKIA[0-9A-Z]{16}|password[[:space:]]*=[[:space:]]*['\"][^'\"]+)" "$dir"; then
+    echo "  ❌ 检测到疑似硬编码密钥"; errs=$((errs+1))
   fi
-
-  local skill_name
-  skill_name=$(awk '/^---$/{p++;next} p==1 && /^name:/{sub(/^name:[[:space:]]*/, ""); print; exit}' "$file" | tr -d '"' | tr -d "'")
-  if [[ -z "$skill_name" ]]; then
-    echo "  ❌ [元数据缺失] Frontmatter 中缺少 'name:' 字段"
-    ((errors++))
-  elif [[ ! "$skill_name" =~ ^stack-[a-z0-9-]+$ ]]; then
-    echo "  ❌ [命名不规范] name='$skill_name' 必须符合 'stack-<小写字母/数字/短横线>' 格式"
-    ((errors++))
-  fi
-
-  local skill_desc
-  skill_desc=$(awk '/^---$/{p++;next} p==1 && /^description:/{sub(/^description:[[:space:]]*/, ""); print; exit}' "$file")
-  if [[ -z "$skill_desc" || ${#skill_desc} -lt 10 ]]; then
-    echo "  ❌ [元数据缺失] Frontmatter 中 'description:' 缺失或过短（影响路由触发）"
-    ((errors++))
-  fi
-
-  local required_sections=("## 1." "## 2." "## 3." "## 4.")
-  for sec in "${required_sections[@]}"; do
-    if ! grep -q "^${sec}" "$file"; then
-      echo "  ❌ [结构残缺] 缺少标准章节标题 '${sec} ...'（需包含：技术栈/目录拓扑/编码红线/自检命令）"
-      ((errors++))
-    fi
-  done
-
-  local line_count
-  line_count=$(wc -l < "$file" | xargs)
-  if [[ "$line_count" -gt 220 ]]; then
-    echo "  ⚠️  [体积警告] 当前共 ${line_count} 行（建议控制在 80~180 行以保持高信噪比）"
-    ((warnings++))
-  fi
-
-  if grep -Eqi "(sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{20,}|AKIA[0-9A-Z]{16}|password[[:space:]]*=[[:space:]]*['"][^'"]+)" "$file"; then
-    echo "  ❌ [安全红线] 检测到疑似硬编码密钥或敏感凭证，严禁同步至中央仓库！"
-    ((errors++))
-  fi
-
-  if [[ "$errors" -gt 0 ]]; then
-    echo "  🚫 质检未通过（共 $errors 项错误），已阻止同步。"
-    return 1
-  fi
-
-  if [[ "$warnings" -gt 0 && "$FORCE" == false ]]; then
-    echo "  ⚠️  存在 $warnings 项警告，如需忽略警告强行同步请附加 --force 参数。"
-    return 1
-  fi
-
-  VALIDATED_SKILL_NAME="$skill_name"
-  return 0
+  local lines; lines=$(wc -l < "$md" | tr -d ' ')
+  if [[ "$lines" -gt 220 && "$FORCE" == false ]]; then echo "  ❌ 共 ${lines} 行，超过 220（--force 忽略）"; errs=$((errs+1)); fi
+  return $errs
 }
 
-SYNCED_COUNT=0
-
-for file in "${TARGET_FILES[@]}"; do
-  VALIDATED_SKILL_NAME=""
-  if ! validate_skill "$file"; then
-    continue
-  fi
-
-  stack_dir_name="${VALIDATED_SKILL_NAME#stack-}"
-  dest_dir="$HUB_DIR/stacks/$stack_dir_name"
-  dest_file="$dest_dir/SKILL.md"
-
-  mkdir -p "$dest_dir"
-
-  if [[ -f "$dest_file" ]]; then
-    if cmp -s "$file" "$dest_file"; then
-      echo "  ✨ [$stack_dir_name] 内容与中央仓库完全一致，无需更新。"
-      continue
-    else
-      echo "  📝 检测到 [$stack_dir_name] 有增量更新，差异预览如下："
-      diff -u "$dest_file" "$file" | head -n 30 || true
-      cp "$file" "$dest_file"
-      echo "  ✅ 已覆盖更新: $dest_file"
-      ((SYNCED_COUNT++))
-    fi
-  else
-    cp "$file" "$dest_file"
-    echo "  🆕 已新增技术栈规范: $dest_file"
-    ((SYNCED_COUNT++))
-  fi
+# 先全部质检，任何一个失败都不动源码仓库
+for d in "${DIRS[@]}"; do
+  name="$(basename "$d")"
+  case "$name" in stack-*|mode-*) ;; *) echo "❌ 目录名必须以 stack- 或 mode- 开头: $name" >&2; exit 1 ;; esac
+  echo "🔍 质检 $name"
+  validate "$d" "$name" || { echo "🚫 质检未通过，已中止" >&2; exit 1; }
 done
 
-if [[ "$SYNCED_COUNT" -gt 0 ]]; then
-  echo ""
-  echo "🎉 共同步 $SYNCED_COUNT 份规范至 $HUB_DIR/stacks/。"
-  if [[ -d "$HUB_DIR/.git" ]]; then
-    echo "💡 建议执行以下命令提交经验版本至 github.com/lupguo/AI314："
-    echo "   git -C "$HUB_DIR" status -s"
-    echo "   git -C "$HUB_DIR" add stacks/ && git -C "$HUB_DIR" commit -m "chore(skills): sync stack specs from $(basename "$(pwd)")""
-  fi
-fi
+[[ -z "$(git -C "$SRC" status --porcelain)" ]] || { echo "❌ 源码仓库有未提交修改: $SRC" >&2; exit 1; }
+branch="contrib/sync-back-$(date +%Y%m%d%H%M%S)"
+git -C "$SRC" switch -q -c "$branch"
+for d in "${DIRS[@]}"; do
+  name="$(basename "$d")"
+  layer="L1-stacks"; [[ "$name" == mode-* ]] && layer="L2-modes"
+  dest="$SRC/content/$layer/$name"
+  rm -rf "$dest"; mkdir -p "$dest"
+  cp -R "$d/." "$dest/"
+  echo "  ✅ $name → content/$layer/$name"
+done
+echo "🎉 已写入分支 $branch。下一步：cd $SRC && make check && git add -A && git commit && gh pr create"
