@@ -12,7 +12,7 @@ git -C "$WORK" init -q
 Q="不要调用任何工具，只根据你当前上下文中已加载的 AI314 宪法与可用技能回答，严格按 3 行输出：
 VERSION=<宪法中 'AI314 宪法版本：' 后面的版本号，原样>
 SKILL=<可用技能中是否有 stack-go-microservice，yes 或 no>
-QUOTE=<宪法第 7 条（架构与物理复杂度上限）的最后一句话，原样>"
+QUOTE=<宪法第 3 条（架构设计）的最后一句话，原样>"
 
 case "$AGENT" in
   agy) (cd "$WORK" && agy -p "$Q" --print-timeout 300s) ;;
