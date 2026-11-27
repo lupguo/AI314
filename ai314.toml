@@ -1,6 +1,6 @@
 [plugin]
 name = "ai314"
-version = "0.2.0"
+version = "0.3.0"
 description = "AI314 VibeCoding 工程规范：L0 宪法 + L1 技术栈 + L2 研发模式"
 author = "lupguo"
 repository = "https://github.com/lupguo/AI314"
