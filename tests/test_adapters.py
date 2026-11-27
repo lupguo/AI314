@@ -46,7 +46,7 @@ class AdapterTest(unittest.TestCase):
         self.assertIn("> AI314 宪法版本：v1.2.3", rule)
         self.assertTrue((a / "skills/planning/SKILL.md").is_file())
         hooks = json.loads((a / "hooks.json").read_text())
-        self.assertIn("./hooks/auto-update antigravity", hooks["ai314"]["SessionStart"][0]["command"])
+        self.assertIn("/plugins/ai314/hooks/auto-update", hooks["ai314"]["SessionStart"][0]["command"])
         self.assertTrue(os.access(a / "hooks/auto-update", os.X_OK))
 
     def test_session_start_json_escaping(self):

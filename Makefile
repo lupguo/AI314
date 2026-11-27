@@ -15,7 +15,7 @@ VERSION := $(shell sed -n 's/^version *= *"\(.*\)"/\1/p' ai314.toml | head -1)
 .PHONY: help build validate test check verify-dist install install-claude install-agy uninstall release clean
 
 help:
-	@echo "make build | check | install | install-claude | install-agy | release VERSION=x.y.z NOTE='...' | clean"
+	@echo "make build | check | install | install-claude | install-agy | release NEW=x.y.z NOTE='...' | clean"
 
 validate:
 	@$(BUILD) validate
@@ -35,7 +35,7 @@ check: validate test verify-dist
 	@echo "✅ check 通过 (v$(VERSION))"
 
 # CC 系客户端：目录型 marketplace 原地加载 dist/claude，重建后下次会话即生效
-install-claude: build
+install-claude: validate test build
 	@if $(CLAUDE_BIN) plugin marketplace list 2>/dev/null | grep -q "$(NAME)"; then \
 	  $(CLAUDE_BIN) plugin marketplace update $(NAME); \
 	else \
@@ -49,7 +49,7 @@ install-claude: build
 	@echo "✅ $(CLAUDE_BIN) 已安装 $(NAME) v$(VERSION)（新会话生效）"
 
 # AGY 无 update 命令：卸载后重装
-install-agy: build
+install-agy: validate test build
 	@$(AGY) plugin uninstall $(NAME) >/dev/null 2>&1 || true
 	@$(AGY) plugin install "$(abspath $(DIST))/antigravity"
 	@echo "✅ $(AGY_BIN) 已安装 $(NAME) v$(VERSION)"
@@ -65,8 +65,12 @@ uninstall:
 release:
 	@test -n "$(NEW)" || { echo "用法: make release NEW=x.y.z NOTE='变更说明'"; exit 1; }
 	@test -z "$$(git status --porcelain)" || { echo "❌ 工作区不干净：请先提交内容改动，再发布版本"; exit 1; }
+	@! git rev-parse -q --verify "refs/tags/v$(NEW)" >/dev/null || { echo "❌ tag v$(NEW) 已存在"; exit 1; }
 	@$(PY) scripts/release.py "$(NEW)" "$(NOTE)"
-	@$(MAKE) --no-print-directory check || { git checkout -- ai314.toml CHANGELOG.md; echo "❌ check 失败，已回滚版本号"; exit 1; }
+	@$(MAKE) --no-print-directory check || { \
+	  git checkout -- ai314.toml; \
+	  if git ls-files --error-unmatch CHANGELOG.md >/dev/null 2>&1; then git checkout -- CHANGELOG.md; else rm -f CHANGELOG.md; fi; \
+	  echo "❌ check 失败，已回滚版本号与 CHANGELOG"; exit 1; }
 	@git add ai314.toml CHANGELOG.md && git commit -qm "chore(release): v$(NEW)" && git tag "v$(NEW)"
 	@echo "✅ 已发布 v$(NEW)（commit + tag）。运行 make install 让本机两端加载新版本"
 
