@@ -101,10 +101,10 @@ class DistillTest(unittest.TestCase):
         env = make_env(self.home, {"lessons": [
             {"op": "merge", "id": "L-001", "add_count": 2, "evidence": "e"},
             {"op": "new", "title": "新坑", "scene": "s", "symptom": "y", "fix": "f", "owner": "project",
-             "generic_rule": ""}], "ok_patterns": [], "dropped": 1})
+             "generic_rule": "", "count": 3}], "ok_patterns": [], "dropped": 1})
         self.assertTrue(distill.run(self.proj, config.load(env), env, today=TODAY))
         ls, _ = store.load(md)
-        self.assertEqual([(x.id, x.count) for x in ls], [("L-001", 4), ("L-002", 1)])
+        self.assertEqual([(x.id, x.count) for x in ls], [("L-001", 4), ("L-002", 3)])
         self.assertEqual(self.proj.items(), [])
         prompt = (self.home / "prompt.txt").read_text(encoding="utf-8")
         self.assertIn("L-001", prompt)

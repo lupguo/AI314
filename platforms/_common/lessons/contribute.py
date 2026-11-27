@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import time
 from collections import Counter
@@ -13,6 +14,7 @@ from .inbox import file_lock
 GAP, CHECK_TIMEOUT = 86400, 600
 NEW_STACK_MIN, NEW_STACK_PROJECTS = 5, 2
 DRAFT = ("L0",)
+CC_PREFIX = re.compile(r"^\s*\w+(\([^)]*\))?!?:\s*")  # 模型常自带 Conventional 前缀，统一由脚本加
 
 PROMPT = """你是 AI314 工程规范仓库的维护者。下面是从多个业务项目自动汇总的经验条目（已去业务化，project 为匿名 id）。
 请判断哪些条目已成熟（同一规则来自 ≥2 个项目，或累计次数 ≥3{ok_rule}），只把成熟条目以最小改动融入目标文件。
@@ -23,7 +25,7 @@ PROMPT = """你是 AI314 工程规范仓库的维护者。下面是从多个业�
 3. 保持目标文件原有结构与风格，最小 diff；不要改动与条目无关的内容。{extra}
 4. 只能修改或新建目标文件：{target}
 5. 只输出一个 JSON 对象，不要任何解释：
-{{"files":[{{"path":"{target}","content":"<修改后的完整文件内容>"}}],"adopted":[条目编号],"pending":[条目编号],"title":"<不超过 50 字的中文 PR 标题>"}}
+{{"files":[{{"path":"{target}","content":"<修改后的完整文件内容>"}}],"adopted":[条目编号],"pending":[条目编号],"title":"<不超过 50 字的中文标题，不要带 feat(...): 前缀>"}}
 没有成熟条目时输出 {{"files":[],"adopted":[],"pending":[全部编号],"title":""}}。
 
 目标文件当前内容：
@@ -197,7 +199,8 @@ def _push(wt: Path, branch: str, cfg, env) -> str:
 
 def _publish(owner, recs, out, wt, branch, cfg, env) -> str:
     adopted = [i for i in out.get("adopted") or [] if isinstance(i, int) and 0 <= i < len(recs)]
-    title = f"feat({_scope(owner)}): {(out.get('title') or '吸收项目经验').strip()[:60]}"
+    subject = CC_PREFIX.sub("", str(out.get("title") or "")).strip() or "吸收项目经验"
+    title = f"feat({_scope(owner)}): {subject[:60]}"
     _run(["git", "-C", str(wt), "add", "-A"], env)
     _run(["git", "-C", str(wt), "commit", "-qm", title + "\n\n由 AI314 lessons loop 自动生成。"], env)
     head = _push(wt, branch, cfg, env)

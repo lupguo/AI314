@@ -137,6 +137,12 @@ class ContribTest(unittest.TestCase):
         self.assertNotIn("pr create", self.gh_log())
         self.assertIn("bad_output", (self.home / "data/logs/lessons.log").read_text())
 
+    def test_title_prefix_not_duplicated(self):
+        self.stub_runner(self.files_result(title="docs(stack-go-microservice): 沉淀分层红线"))
+        self.seed_pending()
+        contribute.maybe_run(config.load(self.env), self.env)
+        self.assertIn("--title feat(stack-go-microservice): 沉淀分层红线 --body", self.gh_log())
+
     def test_draft_for_l0(self):
         self.stub_runner(self.files_result(path="content/L0-constitution/AGENTS.base.md"))
         self.seed_pending(owner="L0")

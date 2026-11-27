@@ -19,12 +19,12 @@ PROMPT = """你是 AI314 工程规范的经验提炼器。下面是某个项目�
 
 规则：
 1. 只保留有明确证据、可复用的经验；噪声（正常需求描述误判为纠正等）直接丢弃并计入 dropped。
-2. 与已有条目同类的用 merge（给出已有 id 与本批新增次数 add_count），否则用 new。
+2. 与已有条目同类的用 merge（给出已有 id 与本批新增次数 add_count），否则用 new（count 为本批支撑该条目的信号数）。
 3. owner 只能取：{owners}。仅与本项目业务相关的用 project。
 4. generic_rule：去业务化后的一句可核查硬约束，禁止出现项目名、业务名词；owner 为 project 时留空。
 5. ok_patterns.question_type 也必须去业务化（如"是否为草稿创建目录"），suggest 写"此类决策默认采用 X，不再询问"。
 6. 只输出一个 JSON 对象，不要任何解释。格式：
-{{"lessons":[{{"op":"merge","id":"L-001","add_count":2}},{{"op":"new","title":"","scene":"","symptom":"","fix":"","owner":"","generic_rule":""}}],
+{{"lessons":[{{"op":"merge","id":"L-001","add_count":2}},{{"op":"new","title":"","scene":"","symptom":"","fix":"","owner":"","generic_rule":"","count":1}}],
  "ok_patterns":[{{"question_type":"","count":1,"suggest":""}}],"dropped":0}}
 
 已有条目索引：
@@ -74,6 +74,14 @@ def _prompt(items, lessons, owners) -> str:
     return PROMPT.format(owners="、".join(owners), index=index, signals=sigs)
 
 
+def _pos(v) -> int:
+    """模型给的次数可能是字符串或缺失：容错为 ≥1 的整数。"""
+    try:
+        return max(int(v), 1)
+    except (TypeError, ValueError):
+        return 1
+
+
 def _next_id(lessons) -> str:
     n = max((int(x.id[2:]) for x in lessons), default=0)
     return f"L-{n + 1:03d}"
@@ -85,13 +93,14 @@ def _apply_lessons(out, lessons, owners, today, pid, env) -> list[tuple[str, dic
         if not isinstance(it, dict):
             continue
         if it.get("op") == "merge" and it.get("id") in by_id:
-            x, add = by_id[it["id"]], max(int(it.get("add_count") or 1), 1)
+            x, add = by_id[it["id"]], _pos(it.get("add_count"))
             x.count, x.last = x.count + add, today
         elif it.get("op") == "new" and it.get("title") and _valid_owner(it.get("owner", ""), owners):
             x = store.Lesson(_next_id(lessons), it["title"], it.get("scene", ""), it.get("symptom", ""),
                              it.get("fix", ""), it["owner"], it.get("generic_rule", ""), 1, today)
+            x.count = add = _pos(it.get("count"))
             lessons.append(x)
-            by_id[x.id], add = x, 1
+            by_id[x.id] = x
         else:
             paths.log(f"[distill] skip invalid item: {json.dumps(it, ensure_ascii=False)[:200]}", env)
             continue
@@ -105,7 +114,7 @@ def _apply_oks(out, oks, today, pid) -> list[dict]:
     for p in out.get("ok_patterns") or []:
         if not isinstance(p, dict) or not p.get("question_type"):
             continue
-        q, n, s = p["question_type"], max(int(p.get("count") or 1), 1), p.get("suggest", "")
+        q, n, s = p["question_type"], _pos(p.get("count")), p.get("suggest", "")
         if q in by_q:
             by_q[q].count += n
         else:
