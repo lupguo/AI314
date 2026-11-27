@@ -5,6 +5,8 @@ description: 当开发或维护 macOS 菜单栏工具（Menu Bar App）、系统
 
 # macOS MenuBar App 工程规范
 
+> 状态：草案（抽象度待共建完善，改进请用 `ai314:contribute` 回流）
+
 ## 1. 钦定技术栈（禁止自行替换或引入重型跨平台框架）
 
 - **语言与并发模型**：Swift 6（强制开启 Strict Concurrency Checking，`@MainActor` 隔离 UI 状态）

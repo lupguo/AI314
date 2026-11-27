@@ -5,6 +5,8 @@ description: 当开发数据采集爬虫、网页抓取、API 逆向自动化或
 
 # 爬虫与自动化采集脚本工程规范
 
+> 状态：草案（抽象度待共建完善，改进请用 `ai314:contribute` 回流）
+
 ## 1. 钦定技术栈（按场景二选一，禁止混用）
 - **高并发 HTTP/API 采集（首选）**：Python 3.12+ + `httpx`（异步模式）+ `tenacity`（指数退避重试）+ `pydantic`（数据结构强校验落盘）。
 - **强 JS 渲染/复杂反爬采集**：`Playwright`（异步 API）+ 持久化上下文（Persistent Context），严禁使用已过时的 Selenium。

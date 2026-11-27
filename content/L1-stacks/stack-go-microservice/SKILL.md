@@ -5,6 +5,8 @@ description: 当开发或维护 Go 语言微服务、后端 API、RPC 服务或�
 
 # Go 微服务工程规范
 
+> 状态：草案（抽象度待共建完善，改进请用 `ai314:contribute` 回流）
+
 ## 1. 钦定技术栈（禁止自行替换或重新调研）
 - **语言与核心框架**：Go 1.23+，微服务框架优先 Kratos 或 Gin + gRPC (`google.golang.org/grpc`)
 - **数据存储与缓存**：PostgreSQL + GORM（或 sqlc）；缓存统一使用 Redis (`github.com/redis/go-redis/v9`)

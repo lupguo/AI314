@@ -1,3 +1,8 @@
+---
+name: extract-stack
+description: 当需要从当前项目代码逆向提炼一份可复用的 L1 技术栈规范（stack-*/SKILL.md）草稿，准备沉淀到 AI314 时使用。
+---
+
 # 任务指令：从当前项目逆向提炼 L1 级《技术栈工程规范 (SKILL.md)》
 
 你现在是一名资深软件架构师与 VibeCoding 规范工程师。

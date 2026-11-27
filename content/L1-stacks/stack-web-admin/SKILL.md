@@ -5,6 +5,8 @@ description: 当开发或维护 Web 后台管理系统、B端控制台、数据�
 
 # Web Admin 后台管理系统工程规范
 
+> 状态：草案（抽象度待共建完善，改进请用 `ai314:contribute` 回流）
+
 ## 1. 钦定技术栈（禁止自行引入其他 UI 框架或状态库）
 
 - **核心框架**：React 19 + TypeScript（严格模式 `strict: true`，严禁使用 `any`）+ Vite

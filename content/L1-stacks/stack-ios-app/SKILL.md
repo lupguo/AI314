@@ -5,6 +5,8 @@ description: 当开发或维护 iOS 原生客户端应用（SwiftUI / UIKit）�
 
 # iOS 客户端工程规范
 
+> 状态：草案（抽象度待共建完善，改进请用 `ai314:contribute` 回流）
+
 ## 1. 钦定技术栈（禁止自行引入冗余第三方框架）
 
 - **语言与并发**：Swift 6（开启 Strict Concurrency）+ Swift Concurrency (`async/await`, `Actor`)
