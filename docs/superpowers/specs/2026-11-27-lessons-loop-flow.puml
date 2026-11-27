@@ -1,0 +1,87 @@
+@startuml lessons-loop
+title AI314 经验自动回流闭环（lessons loop）
+
+|业务项目会话|
+start
+:SessionStart：注入宪法\n（含"开工前先读 docs/ai314/lessons.md"）;
+:Agent 工作 / 用户纠正 / 用户回 OK;
+:一轮结束，触发 Stop hook\n（Claude Code 与 Antigravity 都是）;
+
+|① 捕获 capture（纯脚本，0 token）|
+if (AI314_HEADLESS=1？\n或 AI314_LESSONS=off？\n或 .ai314/disabled？\n或非 git 仓库？) then (是)
+  :立即退出;
+  stop
+endif
+:fork 到后台，前台 <100ms 返回;
+:按 state.json 偏移\n增量读取 transcript 新增行;
+:规则匹配信号\ncorrection / rework / test_flip / tool_fail / ok;
+:追加到 <项目>/.ai314/inbox.jsonl\n（gitignored，原始片段只留在这里）;
+if (AI314_LESSONS=capture-only？) then (是)
+  stop
+endif
+if (非 ok 信号 ≥15，\n或最早一条 ≥7 天且总数 ≥3？\n且未持锁、不在退避期) then (否)
+  stop
+endif
+
+|② 提炼 distill（无头 Agent CLI）|
+:加锁;
+:读 ~/.ai314/config.toml（环境变量可覆盖）
+选 runner：auto→claude/tclaude/agy/codex
+模型 + [network] 代理注入子进程（AI314_HEADLESS=1）;
+if (找到 runner？) then (否)
+  :记 no_runner，退避，inbox 保留;
+  stop
+endif
+:按 runner 的 probe_url 走代理预检（5s）;
+if (预检通过？) then (否)
+  :记 network 错误，指数退避 1h→24h\ninbox 保留;
+  stop
+endif
+:<runner> -p / exec（不授予工具，prompt 走 stdin）\n输入：inbox 新条目 + lessons 索引 + 可选归属清单;
+if (输出合法？) then (否)
+  :记 bad_output / auth 错误\ninbox 保留，按策略重试;
+  stop
+endif
+:合并写入 docs/ai314/lessons.md\n（反面经验 merge/new 计数、可默认放行的提问）;
+:超过 150 行时把低频旧条目移入 lessons-archive.md;
+:清空已处理的 inbox 行，释放锁;
+
+|③ 聚合（本机全局库 ~/.ai314/data）|
+:owner≠project 的条目\n→ lessons/<owner>.jsonl（只写 generic_rule、计数、项目 id）;
+:ok_patterns 去业务化\n→ lessons/ok-defaults.jsonl;
+:projects.json 维护 项目 id → 本机路径;
+if (lessons.contribute = true？（默认 false）) then (否)
+  :只在本机累积;
+  stop
+endif
+if (某 owner 待回流 ≥3 且距上次 ≥24h？\nAI314_SRC 存在且 gh 已登录？) then (否)
+  stop
+endif
+
+|④ 回流 contribute|
+:git worktree 基于 origin/main 建分支\nlessons/<owner>-<日期>（不动用户当前分支）;
+if (owner 类型) then (new-stack:<特征>\n≥2 项目且 ≥5 条)
+  :脚本按 extract-stack 顺序采样来源项目文件（≤60KB）\n+ 该特征 lessons（反面禁令依据）→ runner（不授予工具）\n→ content/L1-stacks/stack-<特征>/，[待补充] 占位;
+else (L0 / stack-* / mode-* / ok-defaults)
+  :脚本附上目标 content/ 文件全文 + 待回流条目 → runner（不授予工具）\n聚类、判断成熟度（≥2 项目或 ≥3 次；ok 为 ≥2 项目且 ≥5 次）\n输出 {files, adopted, pending}，脚本校验路径后写入 worktree;
+endif
+:make check;
+if (全部通过？) then (否)
+  :删除分支，记 check_failed，下次重试;
+  stop
+endif
+:commit（Conventional Commits）;
+if (对 lupguo/AI314 有 push 权限？) then (有)
+  :直接 push 分支;
+else (无)
+  :gh repo fork，推送到 fork;
+endif
+:gh pr create\n（L0 / new-stack 开 --draft；正文只写匿名项目 id + 次数）;
+:全局库中把已采纳条目标为 submitted，移除 worktree;
+
+|用户 / GitHub|
+:审核 PR → 合并;
+:合并后自动发版（现有 release 流程）;
+:各项目 auto-update 拉取新版本\n下次 SessionStart 生效;
+stop
+@enduml
